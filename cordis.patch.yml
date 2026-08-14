@@ -1,0 +1,38 @@
+# dsh-desktop — a minimal DSH surface proving a bundle patch can drive the
+# `main` agent and stream its session events to ANY sink (here: JSON Lines on
+# stdout). A native (Electron) window later replaces stdout with a renderer.
+#
+# Data flow: desktop-startup mints the session identity → agent-loop creates
+# the `main` agent under it → the desktop surface subscribes to session/event,
+# sends a prompt from stdin, streams deltas, and exits after the turn settles.
+
+- insert:
+    # Mints the `main` agent's session identity and exposes it to both rows.
+    - id: desktop-startup
+      name: 'dsh-desktop/startup'
+
+    # The surface. `name` resolves through this package's `exports["."]`.
+    - id: desktop
+      name: 'dsh-desktop'
+      inject: [desktopStartup]
+
+# The agent this surface drives. Its session identity comes from
+# desktop-startup (through the configuredAgentIdentities key), not this config.
+- id: agent-loop
+  inject: [desktopStartup]
+  config:
+    agents:
+      - id: main
+        provider: deepseek-official
+        model: deepseek-v4-pro
+        cwd: !!js process.cwd()
+
+- id: system-prompt
+  config:
+    persona: |
+      You are a coding agent. Keep answers brief and factual.
+
+- id: llm-deepseek
+  config:
+    thinking: enabled
+    reasoningEffort: max
