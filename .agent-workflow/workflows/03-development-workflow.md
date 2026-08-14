@@ -309,7 +309,6 @@ git push origin <当前分支>
 <!-- CONTENT_START: related_files -->
 - `package.json` — scripts（test/lint/format）+ devDependencies
 - `README.md` / `README.zh-CN.md` — 安装与运行命令
-- `PLAN.md` — 环境速查（Node/DSH/pnpm 版本）
 - `cordis.patch.yml` — 插件编排
 - `src/*.js` — 插件源码
 - `test/*.test.js` — 单元测试

@@ -13,7 +13,11 @@ export default [
         process: 'readonly',
         console: 'readonly',
         setTimeout: 'readonly',
-        clearTimeout: 'readonly'
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly'
       }
     }
   }

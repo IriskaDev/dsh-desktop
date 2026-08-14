@@ -58,7 +58,6 @@
 ├── cordis.patch.yml      # bundle patch（三层插件编排）
 ├── package.json          # 插件包元数据（dsh.bundle.patch 指向 patch）
 ├── README.md             # 项目说明与运行方式
-├── PLAN.md               # 决策固化与续接说明
 ├── AGENTS.md             # Dev Agent Workflow 入口
 ├── .agent-workflow/      # 16 流程工作流模板
 ├── LICENSE               # MIT
@@ -103,7 +102,6 @@
 - `README.md` — 项目说明与安装/运行方式
 - `cordis.patch.yml` — 插件编排（三层）
 - `src/startup.js`、`src/index.js` — 插件源码
-- `PLAN.md` — 决策与续接说明
 - `AGENTS.md`、`.agent-workflow/` — 研发工作流
 <!-- CONTENT_END: related_files -->
 

@@ -6,7 +6,7 @@ test('module name is desktop', () => {
   assert.equal(name, 'desktop');
 });
 
-test('inject declares agents dependency', () => {
+test('inject declares webServer dependency', () => {
   assert.ok(Array.isArray(inject));
-  assert.ok(inject.includes('agents'));
+  assert.ok(inject.includes('webServer'));
 });

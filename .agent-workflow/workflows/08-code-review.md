@@ -118,7 +118,7 @@
 
 <!-- CONTENT_START: related_files -->
 - 无 CODEOWNERS / PR 模板 / CI review 配置
-- `README.md`、`PLAN.md` — 项目背景
+- `README.md` / `README.zh-CN.md` — 项目背景
 <!-- CONTENT_END: related_files -->
 
 ---

@@ -1,96 +1,67 @@
-import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 export const name = 'desktop';
-export const inject = ['agents'];
+export const inject = ['webServer'];
+
+const require = createRequire(import.meta.url);
+const ELECTRON_MAIN = fileURLToPath(
+  new URL('../apps/electron/main.js', import.meta.url)
+);
 
 /**
- * The desktop surface: drive the `main` agent and stream its session events to
- * stdout as JSON Lines. A native window later consumes this exact protocol.
- *
- * JSONL events:
- *   {"type":"turn/start","turn":N}
- *   {"type":"delta","kind":"text"|"reasoning","text":"..."}
- *   {"type":"message"}
- *   {"type":"turn/end","reason":"completed"|...}
+ * The desktop surface: once the web server binds, launch an Electron window
+ * loading the DSH web GUI at the bound loopback URL. The agent is driven by the
+ * web-app bundle's dsh-base layer; this plugin only adds the Electron launcher.
  */
-export function apply(ctx, config = {}) {
-  const { sessionId } = ctx.desktopStartup;
+export function apply(ctx) {
+  const launch = () => {
+    const port = ctx.webServer?.port;
+    if (port === undefined) {
+      ctx.logger?.warn?.(
+        'desktop: webServer port unavailable; skipping Electron launch'
+      );
+      return;
+    }
+    const url = `http://127.0.0.1:${String(port)}`;
 
-  const emit = (event) => {
-    process.stdout.write(`${JSON.stringify(event)}\n`);
-  };
+    let electronPath;
+    try {
+      electronPath = require('electron');
+    } catch {
+      ctx.logger?.warn?.(
+        'desktop: electron is not installed; skipping Electron launch'
+      );
+      return;
+    }
 
-  let started = false;
-
-  const start = (agent) => {
-    if (started) return;
-    if (agent.id !== sessionId) return;
-    started = true;
-
-    ctx.on('session/event', (session, event) => {
-      if (session !== agent.session) return;
-      switch (event.type) {
-        case 'turn/start':
-          emit({ type: 'turn/start', turn: event.data.turn });
-          break;
-        case 'assistant/chunk': {
-          const chunk = event.data.chunk;
-          if (chunk.type === 'text-delta') {
-            emit({ type: 'delta', kind: 'text', text: chunk.text });
-          } else if (chunk.type === 'reasoning-delta') {
-            emit({ type: 'delta', kind: 'reasoning', text: chunk.text });
-          }
-          break;
-        }
-        case 'assistant/message':
-          emit({ type: 'message' });
-          break;
-        case 'turn/end': {
-          emit({
-            type: 'turn/end',
-            reason: event.data.reason?.kind,
-            error: event.data.reason?.error?.message
-          });
-          // One-shot spike: dispose the tree and exit once the turn settles,
-          // with a bounded fallback in case dispose hangs.
-          const timer = setTimeout(() => process.exit(0), 2000);
-          void ctx.root.fiber.dispose().then(() => {
-            clearTimeout(timer);
-            process.exit(0);
-          });
-          break;
-        }
-        default:
-          break;
+    // Pass the URL and parent PID via env vars: Electron's CLI arg parsing can
+    // crash (exit 0xFFFFFFFF) when it sees URL-like arguments, and env vars
+    // are inherited reliably through the launcher -> main-process chain.
+    const child = spawn(electronPath, [ELECTRON_MAIN], {
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        DSH_ELECTRON_URL: url,
+        DSH_ELECTRON_PARENT_PID: String(process.pid)
       }
     });
-
-    // First user turn from config.prompt, else from stdin (pipe/redirect).
-    const send = (text) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      agent.followup({
-        id: randomUUID(),
-        role: 'user',
-        content: [{ type: 'text', text: trimmed }],
-        source: { kind: 'user' }
-      });
-    };
-
-    if (config.prompt) {
-      send(config.prompt);
-    } else {
-      let buffer = '';
-      process.stdin.setEncoding('utf8');
-      process.stdin.on('data', (chunk) => {
-        buffer += chunk;
-      });
-      process.stdin.on('end', () => send(buffer));
-      process.stdin.resume();
-    }
+    child.on('error', (err) => {
+      ctx.logger?.warn?.(`desktop: failed to launch Electron: ${err.message}`);
+    });
   };
 
-  ctx.on('agent/created', ({ agent }) => start(agent));
-  const existing = ctx.agents.roots().find((agent) => agent.id === sessionId);
-  if (existing) start(existing);
+  // Defer until the loader settles so the webServer has bound its port.
+  const settled = ctx.get('loader')?.await?.();
+  if (settled === undefined) {
+    launch();
+  } else {
+    settled.then(
+      () => {
+        if (ctx.get('webServer') !== undefined) launch();
+      },
+      () => {}
+    );
+  }
 }

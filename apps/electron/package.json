@@ -1,0 +1,10 @@
+{
+  "name": "dsh-desktop-electron",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron main.js"
+  }
+}
