@@ -1,5 +1,5 @@
-﻿<!-- MODULE: development-workflow -->
-<!-- STATUS: PARTIAL -->
+<!-- MODULE: development-workflow -->
+<!-- STATUS: DONE -->
 <!-- LAST_ANALYZED: 2026-08-15 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
@@ -12,9 +12,10 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-本项目的「开发」= 改 DSH surface 插件（`src/*.js` + `cordis.patch.yml`）并通过真实 profile 流式跑通。当前无 build / test 步骤（零 build 纯 ESM），后续 Electron 外壳落地后需补充构建与测试。
+本项目的「开发」= 改 DSH surface 插件（`src/*.js` + `cordis.patch.yml`）并通过真实 profile 流式跑通。零 build（纯 ESM 无需编译），已引入 lint / format / test 工具链。
 
 - **前置条件**：Node v26.2.0 + DSH rc.6 + 已 link 的 `~/.dsh/profiles/desktop`
+- **验证手段**：`npm run lint` / `npm run format:check` / `npm test`
 <!-- CONTENT_END: overview -->
 
 ---
@@ -36,8 +37,10 @@
 
 <!-- CONTENT_START: dependency_install -->
 ```bash
-# 本项目零依赖，无需 npm/pnpm install
-# 插件通过 profile link 方式安装：
+# 安装开发工具链（eslint / prettier / commitlint / husky；运行时零依赖）
+npm install
+
+# 插件通过 profile link 方式安装（运行时加载）
 dsh plugin --profile desktop add link:D:\workbench\projects\dsh-desktop
 ```
 <!-- CONTENT_END: dependency_install -->
@@ -80,16 +83,16 @@ git status        # 确认工作区是否干净
 ### Step 2 · 确认/切换分支
 
 <!-- CONTENT_START: dev_branch_cmd -->
-> ⚠️ **待实现** - 请根据项目分支策略填写，或参考 [分支提交规范](../workflows/11-branch-commit.md)。
+> 分支命名规范见 [分支提交规范](../workflows/11-branch-commit.md)：Trunk-based，`feature/<desc>` / `fix/<desc>` / `hotfix/<desc>`（基础分支均 `main`）。
 
-**分支命名规范**：待补充（当前仅 `main` 分支；建议 `feature/<desc>` / `fix/<desc>` / `hotfix/<desc>`，详见 [分支提交规范](../workflows/11-branch-commit.md)）
+**分支命名规范**：`feature/<desc>` / `fix/<desc>` / `hotfix/<desc>`（详见 [分支提交规范](../workflows/11-branch-commit.md)）
 
 **操作**：
 ```bash
 # 基于最新主干创建新分支
-git checkout <目标基础分支>
+git checkout main
 git pull
-git checkout -b <新分支名>
+git checkout -b feature/<desc>
 
 # 或切换到已有分支
 git checkout <已有分支名>
@@ -167,10 +170,11 @@ git pull origin <已有分支名>
 ### Step 7 · 运行单元测试
 
 <!-- CONTENT_START: unit_test_cmd -->
-> 未检测到测试框架（无 test 脚本、无测试目录）。待引入后补充（参考 [测试流程](../workflows/05-testing-process.md)）。
+> 测试框架为 node:test（Node 内置，见 [测试流程](../workflows/05-testing-process.md)）。
 
 ```bash
-# 待补充：运行与本次改动相关的单元测试
+# 运行与本次改动相关的单元测试（按文件过滤）
+node --test test/<相关文件>.test.js
 ```
 <!-- CONTENT_END: unit_test_cmd -->
 
@@ -183,10 +187,9 @@ git pull origin <已有分支名>
 ### Step 8 · 运行全量测试
 
 <!-- CONTENT_START: full_test_cmd -->
-> 未检测到测试配置。
-
 ```bash
-# 待补充：运行全量测试套件
+# 运行全量测试套件
+npm test
 ```
 <!-- CONTENT_END: full_test_cmd -->
 
@@ -250,7 +253,7 @@ git pull origin <已有分支名>
 ### Step 11 · Git 提交
 
 <!-- CONTENT_START: git_commit_cmd -->
-> 本项目已实测使用 Conventional Commits（见 `git log`：`chore:`、`docs:`）。
+> 本项目使用 Conventional Commits，由 commitlint + husky 强制校验（见 [分支提交规范](../workflows/11-branch-commit.md)）。
 
 ```bash
 git add <变更文件>      # 精确 add，避免提交无关文件
@@ -293,9 +296,10 @@ git push origin <当前分支>
 
 | 工具 | 用途 | 配置文件 |
 |------|------|---------|
-| （无） | - | - |
-
-> 推荐（待补充）：Node.js 调试、ESM 支持等编辑器扩展。
+| ESLint | 代码检查 | `eslint.config.js` |
+| Prettier | 代码格式化 | `.prettierrc.json` |
+| commitlint | commit 消息校验 | `commitlint.config.js` |
+| husky | Git hooks | `.husky/` |
 <!-- CONTENT_END: dev_tools -->
 
 ---
@@ -303,11 +307,12 @@ git push origin <当前分支>
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- `package.json` — 无 scripts（零 build/零 test）
-- `README.md` — 安装与运行命令
+- `package.json` — scripts（test/lint/format）+ devDependencies
+- `README.md` / `README.zh-CN.md` — 安装与运行命令
 - `PLAN.md` — 环境速查（Node/DSH/pnpm 版本）
 - `cordis.patch.yml` — 插件编排
 - `src/*.js` — 插件源码
+- `test/*.test.js` — 单元测试
 <!-- CONTENT_END: related_files -->
 
 ---

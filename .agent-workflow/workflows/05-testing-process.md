@@ -1,5 +1,5 @@
 <!-- MODULE: testing-process -->
-<!-- STATUS: PARTIAL -->
+<!-- STATUS: DONE -->
 <!-- LAST_ANALYZED: 2026-08-15 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
@@ -12,9 +12,9 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-未检测到任何测试框架 / 测试目录 / 测试脚本（`package.json` 无 `scripts.test*`，无 `test/`、`__tests__/` 等目录）。当前无自动化测试，验证方式是端到端手工跑流式（`"..." | dsh --profile desktop` 观察 JSONL 输出）。
+测试框架为 **node:test**（Node.js 内置测试运行器，零依赖）。测试文件放 `test/*.test.js`，用 `node --test` 运行。
 
-- 单元测试：无
+- 单元测试：node:test（`test/startup.test.js`、`test/index.test.js`）
 - 集成测试：无
 - E2E 测试：无
 <!-- CONTENT_END: overview -->
@@ -24,11 +24,9 @@
 ## 测试框架
 
 <!-- CONTENT_START: test_frameworks -->
-> 未检测到测试框架。
-
 | 测试类型 | 框架 | 配置文件 |
 |---------|------|---------|
-| 单元测试 | （无） | - |
+| 单元测试 | node:test（Node 内置） | 无（`package.json` scripts.test = `node --test`） |
 | 集成测试 | （无） | - |
 | E2E 测试 | （无） | - |
 <!-- CONTENT_END: test_frameworks -->
@@ -38,13 +36,13 @@
 ## 测试目录结构
 
 <!-- CONTENT_START: test_structure -->
-> 无测试目录。
-
 ```
-# 待补充：测试文件目录结构及命名规范
+test/
+├── startup.test.js    # 对应 src/startup.js
+└── index.test.js      # 对应 src/index.js
 ```
 
-**测试文件命名规范**：待补充（如 `*.test.js`）
+**测试文件命名规范**：`test/<被测模块>.test.js`，与被测文件同名（`src/<name>.js` → `test/<name>.test.js`）
 <!-- CONTENT_END: test_structure -->
 
 ---
@@ -52,13 +50,13 @@
 ## 覆盖率要求
 
 <!-- CONTENT_START: coverage -->
-> 未检测到覆盖率配置。
+> 使用 node:test 内置覆盖率（`--experimental-test-coverage`），当前未设强制阈值。
 
 | 指标 | 最低要求 | 说明 |
 |------|---------|------|
-| 行覆盖率 | - | 待补充 |
-| 分支覆盖率 | - | 待补充 |
-| 函数覆盖率 | - | 待补充 |
+| 行覆盖率 | 无强制阈值 | 待项目稳定后可设门禁 |
+| 分支覆盖率 | 无强制阈值 | 同上 |
+| 函数覆盖率 | 无强制阈值 | 同上 |
 <!-- CONTENT_END: coverage -->
 
 ---
@@ -85,10 +83,9 @@
 > 仅运行与本次改动相关的测试，快速验证，不需要等待全量测试。
 
 <!-- CONTENT_START: unit_test_filter_cmd -->
-> 未检测到测试框架，待引入后补充。
-
 ```bash
-# 待补充：运行指定文件/目录/模块的测试
+# 运行指定测试文件
+node --test test/startup.test.js
 ```
 <!-- CONTENT_END: unit_test_filter_cmd -->
 
@@ -101,10 +98,9 @@
 ### Step 3 · 运行全量单元测试
 
 <!-- CONTENT_START: unit_test_full_cmd -->
-> 未检测到测试框架。
-
 ```bash
-# 待补充：运行所有单元测试
+npm test
+# 等价于 node --test
 ```
 <!-- CONTENT_END: unit_test_full_cmd -->
 
@@ -130,13 +126,12 @@
 ### Step 5 · 检查覆盖率
 
 <!-- CONTENT_START: coverage_cmd -->
-> 未检测到覆盖率工具。
-
 ```bash
-# 待补充：生成覆盖率报告
+# 生成覆盖率（node:test 内置）
+node --test --experimental-test-coverage
 ```
 
-**覆盖率报告路径**：待补充
+**覆盖率报告路径**：stdout 输出（无独立报告文件）
 <!-- CONTENT_END: coverage_cmd -->
 
 **判断**：
@@ -162,14 +157,12 @@
 ## 测试命令速查
 
 <!-- CONTENT_START: test_commands -->
-> 未检测到测试配置，所有命令待补充。
-
 | 场景 | 命令 |
 |------|------|
-| 按模块运行单元测试 | 待补充 |
-| 运行全量单元测试 | 待补充 |
+| 按模块运行单元测试 | `node --test test/<name>.test.js` |
+| 运行全量单元测试 | `npm test`（= `node --test`） |
 | 运行集成测试 | 本项目暂无集成测试 |
-| 生成覆盖率报告 | 待补充 |
+| 生成覆盖率报告 | `node --test --experimental-test-coverage` |
 | 运行 E2E 测试 | 本项目暂无 E2E 测试 |
 <!-- CONTENT_END: test_commands -->
 
@@ -178,8 +171,8 @@
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- `package.json` — 无 scripts.test*
-- （无测试目录 / 测试配置文件）
+- `package.json` — `scripts.test`（`node --test`）
+- `test/startup.test.js`、`test/index.test.js` — 单元测试
 <!-- CONTENT_END: related_files -->
 
 ---

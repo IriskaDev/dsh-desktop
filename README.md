@@ -1,39 +1,67 @@
 # dsh-desktop
 
-最小可行性验证：**用一个 bundle patch 把 DSH 的 `main` agent 驱动起来，并把
-session 事件流式打到 stdout（JSON Lines）**。回答一个问题——「DSH 能否通过
-插件跑在独立进程里、渲染到任意 sink（包括原生窗口）？」答案是能，这里给出
-最薄的那一层证明。下一层是 Electron 外壳（原生窗口、跨平台）。
+A DSH bundle-patch plugin that runs DSH's `main` agent in a standalone process and streams its session events to stdout as JSON Lines. The next layer is a native **Electron** window (cross-platform Windows / macOS / Linux) — a DSH desktop client that is neither a browser nor a TUI.
 
-## 结构
+[中文文档](README.zh-CN.md)
 
-- `cordis.patch.yml` — bundle patch：`desktop-startup`（铸 session 身份）→
-  `agent-loop`（建 `main` agent）→ `desktop`（surface）。
-- `src/startup.js` — 提供 `configuredAgentIdentities` + `desktopStartup` 服务。
-- `src/index.js` — surface：订阅 `session/event`，把 turn/chunk/… 流式写成
-  JSONL；从 stdin 读首个用户输入，`turn/end` 后 dispose 退出。
+## What it proves
 
-零依赖、零 build（纯 ESM JS，`@deepseek-ai/*` 运行时经 `healProfilesModuleFallback`
-在 `$DSH_HOME/profiles/node_modules` 的符号链接解析）。
+It answers one question — *can DSH be driven by a plugin inside a separate process and rendered to any sink (including a native window)?* Yes. This repo is the thinnest layer that proves it. Next, the Electron shell swaps stdout for a real renderer.
 
-## 安装
+## How it works
 
-```powershell
-dsh plugin --profile desktop add link:D:\workbench\projects\dsh-tui\dsh-desktop
+`cordis.patch.yml` wires three plugin layers:
+
+1. `desktop-startup` (`src/startup.js`) — mints the session identity (`configuredAgentIdentities`) and exposes a `desktopStartup` service.
+2. `agent-loop` — creates the `main` agent (`provider: deepseek-official`, `model: deepseek-v4-pro`).
+3. `desktop` (`src/index.js`) — the surface: subscribes to `session/event`, streams turns/chunks to stdout as JSONL, sends the first prompt from stdin, and disposes the tree once the turn settles.
+
+### JSONL protocol
+
+```jsonl
+{"type":"turn/start","turn":1}
+{"type":"delta","kind":"reasoning","text":"..."}
+{"type":"delta","kind":"text","text":"..."}
+{"type":"message"}
+{"type":"turn/end","reason":"completed"}
 ```
 
-## 跑一次
+The Electron shell consumes this exact protocol.
+
+## Install
+
+Zero runtime dependencies, no build step (pure ESM JS). Link the plugin into a DSH profile:
 
 ```powershell
-"列一下当前目录并一句话总结" | dsh --profile desktop
+dsh plugin --profile desktop add link:D:\workbench\projects\dsh-desktop
 ```
 
-stdout 会吐 JSONL：`turn/start` → `delta`(text/reasoning) → `message` →
-`turn/end`。
+## Run
 
-## 下一步：Electron 窗口
+```powershell
+"summarize the current directory" | dsh --profile desktop
+```
 
-把 `src/index.js` 里 `emit` 的目标从 `process.stdout` 换成一个真正的 renderer
-即可。最省事的桥是**旁车进程**：Electron 主进程 spawn
-`dsh --profile desktop`，读 stdout 的 JSONL 渲染到窗口，把用户输入写回 stdin。
-DSH 进程与窗口进程彻底解耦，跨平台（Windows/macOS/Linux）。
+stdout emits JSONL: `turn/start` → `delta` (reasoning/text) → `message` → `turn/end`.
+
+> A real streaming run needs `DEEPSEEK_API_KEY` in `~/.dsh/.credentials.yaml`.
+
+## Develop
+
+```powershell
+npm install        # install dev tooling
+npm test           # node --test (Node's built-in test runner)
+npm run lint       # eslint
+npm run format     # prettier --write
+```
+
+- Node.js `v26.2.0`, pnpm `11.21.0`
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), enforced by commitlint + husky.
+
+## Next step: Electron shell
+
+Replace the `emit` target in `src/index.js` from `process.stdout` to a real renderer. The simplest bridge is a **sidecar process**: the Electron main process spawns `dsh --profile desktop`, reads the JSONL on stdout, renders it in the window, and writes user input back to stdin. DSH and the window stay fully decoupled and cross-platform.
+
+## License
+
+[MIT](LICENSE)

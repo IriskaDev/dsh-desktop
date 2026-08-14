@@ -1,5 +1,5 @@
 <!-- MODULE: rules-constraints -->
-<!-- STATUS: PARTIAL -->
+<!-- STATUS: DONE -->
 <!-- LAST_ANALYZED: 2026-08-15 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
@@ -12,10 +12,10 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-未检测到任何 linter / formatter 配置文件（无 ESLint / Prettier / EditorConfig / tsconfig）。当前为极简 ESM JS 插件，编码规范主要靠约定，尚未固化到配置文件。
+已引入 ESLint（flat config `eslint.config.js`）+ Prettier（`.prettierrc.json`）作为代码检查/格式化工具链，规范已固化到配置文件。
 
-- 现状：无代码检查 / 格式化工具链
-- 建议：引入 ESLint + Prettier 前，先按下方「编码规范」的源码观察约定执行
+- 现状：ESLint 9 flat config + Prettier，通过 `npm run lint` / `npm run format` 执行
+- 无 EditorConfig / tsconfig（非 TS 项目）
 <!-- CONTENT_END: overview -->
 
 ---
@@ -23,16 +23,18 @@
 ## 编码规范
 
 <!-- CONTENT_START: coding_standards -->
-> 未检测到 linter/formatter 配置文件，以下为从源码（`src/startup.js`、`src/index.js`）观察到的既有风格：
+> 由 ESLint + Prettier 强制，配置如下：
 
-- **缩进**：2 空格
-- **引号**：单引号
-- **分号**：语句末尾加分号
-- **尾随逗号**：无
+- **缩进**：2 空格（`tabWidth: 2`）
+- **引号**：单引号（`singleQuote: true`）
+- **分号**：语句末尾加分号（`semi: true`）
+- **尾随逗号**：无（`trailingComma: "none"`）
+- **行宽**：80（`printWidth: 80`）
 - **注释**：英文注释，说明「为什么」而非「是什么」
 
-**Linter 配置**：未检测到（待引入）
-**Formatter 配置**：未检测到（待引入）
+**Linter**：ESLint（`eslint.config.js`，flat config，`@eslint/js` recommended + `eslint-config-prettier`）
+**Formatter**：Prettier（`.prettierrc.json`）
+**命令**：`npm run lint` / `npm run lint:fix` / `npm run format` / `npm run format:check`
 <!-- CONTENT_END: coding_standards -->
 
 ---
@@ -66,11 +68,11 @@
 ## 代码风格配置文件
 
 <!-- CONTENT_START: config_files -->
-> 未检测到任何代码风格配置文件。
-
 | 配置文件 | 工具 | 说明 |
 |---------|------|------|
-| （无） | - | 项目暂无 lint/format 配置 |
+| `eslint.config.js` | ESLint | flat config，`@eslint/js` recommended + `eslint-config-prettier` |
+| `.prettierrc.json` | Prettier | 2 空格 / 单引号 / 分号 / 无尾随逗号 |
+| `.prettierignore` | Prettier | 忽略 `node_modules/`、`.npm-cache/`、`.agent-workflow/`、`*.md` 等 |
 <!-- CONTENT_END: config_files -->
 
 ---
@@ -78,9 +80,9 @@
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- （无 linter/formatter 配置文件）
-- `.gitignore` — 忽略 `node_modules/`、`dist/`、`lib/`、`.env`、`*.log`
-- `.editorconfig` — 未检测到
+- `eslint.config.js` — ESLint flat config
+- `.prettierrc.json` / `.prettierignore` — Prettier 配置
+- `.gitignore` — 忽略 `node_modules/`、`.npm-cache/`、`dist/`、`lib/`、`.env`、`*.log`
 <!-- CONTENT_END: related_files -->
 
 ---

@@ -1,5 +1,5 @@
-﻿<!-- MODULE: branch-commit -->
-<!-- STATUS: PARTIAL -->
+<!-- MODULE: branch-commit -->
+<!-- STATUS: DONE -->
 <!-- LAST_ANALYZED: 2026-08-15 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
@@ -14,10 +14,10 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-当前仅 `main` 单分支（trunk-based），提交消息实测使用 Conventional Commits。无 commitlint / husky / commitizen 等强制配置，规范靠约定。
+当前仅 `main` 单分支（trunk-based），提交消息使用 Conventional Commits，并由 commitlint + husky 强制校验。
 
 - 分支管理模型：Trunk-based（单 `main` + 短期 feature/fix/hotfix 分支）
-- 提交规范：Conventional Commits（已实测）
+- 提交规范：Conventional Commits（commitlint 强制）
 <!-- CONTENT_END: overview -->
 
 ---
@@ -25,7 +25,7 @@
 ## 分支策略
 
 <!-- CONTENT_START: branch_strategy -->
-> 实测：当前仅 `main` 分支（+ `origin/main`），无 `develop`，分支模型接近 Trunk-based / GitHub Flow（单主干 + 短期功能分支）。
+> 实测：当前仅 `main` 分支（+ `origin/main`），无 `develop`。
 
 **分支模型**：Trunk-based（单 `main` 主干 + 短期 feature/fix/hotfix 分支）
 
@@ -33,14 +33,12 @@
 
 | 分支类型 | 命名格式 | 基础分支 | 说明 |
 |---------|---------|---------|------|
-| 主分支 | `main` / `master` | — | 生产环境代码，禁止直接推送 |
-| 开发分支 | `develop` / `dev` | — | 开发集成分支 |
-| 功能分支 | `feature/<issue-id>-<desc>` | develop | 新功能开发 |
-| 修复分支 | `fix/<issue-id>-<desc>` | develop | 普通 Bug 修复 |
-| 紧急修复 | `hotfix/<desc>` | main/master | 生产紧急故障 |
-| 发布分支 | `release/<version>` | develop | 版本发布准备 |
+| 主分支 | `main` | — | 生产环境代码，禁止直接推送 |
+| 功能分支 | `feature/<desc>` | main | 新功能开发 |
+| 修复分支 | `fix/<desc>` | main | 普通 Bug 修复 |
+| 紧急修复 | `hotfix/<desc>` | main | 生产紧急故障 |
 
-> 💡 `<desc>` 使用小写字母和连字符，如 `feature/123-add-user-auth`
+> 💡 `<desc>` 使用小写字母和连字符（无 issue-id，贴合单人 GitHub 仓库），如 `feature/add-electron-shell`。
 <!-- CONTENT_END: branch_strategy -->
 
 ---
@@ -48,7 +46,7 @@
 ## Commit 规范
 
 <!-- CONTENT_START: commit_convention -->
-> 未检测到 commitlint / commitizen / husky 配置；但 `git log` 实测使用 Conventional Commits（`chore:`、`docs:`），以下为采用的规范。
+> 已引入 commitlint（`commitlint.config.js`，`@commitlint/config-conventional`）+ husky（`.husky/commit-msg`），commit 时强制校验。以下为采用的规范。
 
 **Commit 消息格式**（Conventional Commits）：
 ```
@@ -87,11 +85,11 @@ BREAKING CHANGE: /v1/users has been removed, use /v2/users instead
 ## 提交前检查
 
 <!-- CONTENT_START: pre_commit_hooks -->
-> 未检测到 Git hooks（无 `.husky/`、`.pre-commit-config.yaml`、commitlint）。提交前检查依赖人工 + 本工作流「提交代码前置校验」。
+> 已配置 husky（`core.hooksPath = .husky`）+ commitlint。
 
 | 检查项 | 工具 | 触发时机 | 说明 |
 |-------|------|---------|------|
-| （无） | - | - | 待引入 lint/commitlint hooks |
+| Commit 消息校验 | commitlint（`.husky/commit-msg`） | commit-msg | Conventional Commits 强制校验，失败则拒绝提交 |
 <!-- CONTENT_END: pre_commit_hooks -->
 
 ---
@@ -104,7 +102,7 @@ BREAKING CHANGE: /v1/users has been removed, use /v2/users instead
 
 ```bash
 # 1. 切换到基础分支并拉取最新代码
-git checkout <基础分支>       # feature/fix → develop；hotfix → main
+git checkout <基础分支>       # feature/fix/hotfix → main
 git pull origin <基础分支>
 
 # 2. 创建新分支
@@ -214,8 +212,8 @@ git tag --list
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- 无 commitlint / husky / commitizen / .gitflow 配置
-- `git log` — 实测 commit 格式（`chore:`、`docs:`）
+- `commitlint.config.js` — commitlint 配置（`@commitlint/config-conventional`）
+- `.husky/commit-msg` — husky commit-msg 钩子
 - `git branch -a` — 当前分支（仅 `main`）
 <!-- CONTENT_END: related_files -->
 
