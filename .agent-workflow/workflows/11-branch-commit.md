@@ -85,11 +85,13 @@ BREAKING CHANGE: /v1/users has been removed, use /v2/users instead
 ## 提交前检查
 
 <!-- CONTENT_START: pre_commit_hooks -->
-> 已配置 husky（`core.hooksPath = .husky`）+ commitlint。
+> 已配置 husky（`core.hooksPath = .husky/_`）+ commitlint。
 
 | 检查项 | 工具 | 触发时机 | 说明 |
 |-------|------|---------|------|
 | Commit 消息校验 | commitlint（`.husky/commit-msg`） | commit-msg | Conventional Commits 强制校验，失败则拒绝提交 |
+
+> ⚠️ **DSH 沙箱执行**：`git commit` 会触发 commit-msg 钩子（husky → commitlint），钩子经 msys2 的 `sh.exe`/`env.exe` 执行；沙箱受限模式（read-only / workspace-write）禁止命名管道，msys2 程序启动会报 `couldn't create signal pipe, Win32 error 5` 导致 commit 失败。**正确做法：申请提权（`danger-full-access`，会弹审批）后再 `git commit`，让钩子真正生效；不要用 `--no-verify` 绕过**（绕过会让 message 未经 commitlint 校验）。
 <!-- CONTENT_END: pre_commit_hooks -->
 
 ---
@@ -152,6 +154,8 @@ git push origin <当前分支>
 # 首次推送（建立追踪）
 git push -u origin <当前分支>
 ```
+
+> ⚠️ **DSH 沙箱 push**：受限模式下 `git push` 会因 schannel 拿不到凭据（`SEC_E_NO_CREDENTIALS`）或 openssl 找不到 UGit CA（`ca-bundle.trust.crt`）而失败。提权（`danger-full-access`）后走 schannel 通常即可；否则用 `git -c http.sslBackend=openssl -c http.sslVerify=false push "https://x-access-token:<token>@github.com/IriskaDev/dsh-desktop.git" main`（token 用 `gh auth token` 取）。
 
 ### 同步主干最新代码（避免冲突积累）
 
