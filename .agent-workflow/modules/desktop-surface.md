@@ -14,7 +14,7 @@
 ## 功能概述
 
 <!-- CONTENT_START: overview -->
-desktop surface 是 dsh-desktop 的核心插件（`src/index.js`）。它在 DSH 的 `webServer` 服务绑定端口后，spawn Electron（`apps/electron/main.js`）加载 `http://127.0.0.1:<port>`，把「用户手动开浏览器」升级为「dsh 自动开原生窗口」。agent 本身由 web-app bundle 的 dsh-base 层驱动，本插件只负责拉起窗口。
+desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + webserver + Electron 原生窗口，不依赖 `dsh web`。它在 `webServer` 服务绑定端口后 spawn Electron（`apps/electron/main.js`）加载 `http://127.0.0.1:<port>`；webserver 用 `port 0`（OS 分配空闲端口）避免与 `dsh web`（默认 3080）冲突。agent 由 web-app bundle 的 dsh-base 层驱动，本插件只负责拉起窗口。
 <!-- CONTENT_END: overview -->
 
 ---

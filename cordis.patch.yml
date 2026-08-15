@@ -2,13 +2,19 @@
 # Electron window loading the DSH web GUI. The agent is driven by the web-app
 # bundle's dsh-base layer; this patch only adds the Electron launcher surface.
 #
-# New rows go in the `insert:` list; existing rows are patched by id (the whole
-# `config` is replaced, `name`/`inject` are kept).
+# New rows go in the `insert:` list; existing rows are patched by id.
 
 - insert:
     - id: desktop
       name: 'dsh-desktop'
       inject: [webServer]
+
+# Bind the web server to an OS-assigned port (0) so the desktop surface never
+# collides with `dsh web` (which defaults to 3080).
+- id: webserver
+  config:
+    host: !!js ctx.webStartup.host ?? '127.0.0.1'
+    port: !!js ctx.webStartup.port ?? 0
 
 # DeepSeek model defaults for the desktop surface.
 - id: llm-deepseek

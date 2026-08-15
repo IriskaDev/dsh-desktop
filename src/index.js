@@ -37,8 +37,7 @@ export function apply(ctx) {
     }
 
     // Pass the URL and parent PID via env vars: Electron's CLI arg parsing can
-    // crash (exit 0xFFFFFFFF) when it sees URL-like arguments, and env vars
-    // are inherited reliably through the launcher -> main-process chain.
+    // crash (exit 0xFFFFFFFF) when it sees URL-like arguments.
     const child = spawn(electronPath, [ELECTRON_MAIN], {
       stdio: 'ignore',
       env: {
