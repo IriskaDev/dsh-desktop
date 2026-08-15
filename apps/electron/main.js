@@ -30,14 +30,62 @@ protocol.registerSchemesAsPrivileged([
 const HEADER = 4;
 
 function createFrameStream(socket, onFrame) {
-  let pending = Buffer.alloc(0);
+  const chunks = [];
+  let buffered = 0;
+
+  // Consume exactly `count` queued bytes without copying whole frames on
+  // every data event. Keeping chunks in a queue makes parsing O(total bytes)
+  // instead of O(n²) when a large frame arrives in many small TCP chunks.
+  function takeBytes(count) {
+    if (buffered < count) return null;
+    if (chunks.length === 1 && chunks[0].length === count) {
+      const buffer = chunks[0];
+      chunks.length = 0;
+      buffered = 0;
+      return buffer;
+    }
+    if (chunks.length === 1 && chunks[0].length > count) {
+      const buffer = chunks[0].subarray(0, count);
+      chunks[0] = chunks[0].subarray(count);
+      buffered -= count;
+      return buffer;
+    }
+    const buffer = Buffer.allocUnsafe(count);
+    let offset = 0;
+    while (offset < count) {
+      const chunk = chunks[0];
+      const need = count - offset;
+      if (chunk.length <= need) {
+        chunk.copy(buffer, offset);
+        offset += chunk.length;
+        buffered -= chunk.length;
+        chunks.shift();
+      } else {
+        chunk.copy(buffer, offset, 0, need);
+        offset += need;
+        buffered -= need;
+        chunks[0] = chunk.subarray(need);
+      }
+    }
+    return buffer;
+  }
+
   socket.on('data', (chunk) => {
-    pending = Buffer.concat([pending, chunk]);
-    while (pending.length >= HEADER) {
-      const length = pending.readUInt32LE(0);
-      if (pending.length < HEADER + length) return;
-      const body = pending.subarray(HEADER, HEADER + length);
-      pending = pending.subarray(HEADER + length);
+    if (chunk.length === 0) return;
+    chunks.push(chunk);
+    buffered += chunk.length;
+
+    while (buffered >= HEADER) {
+      const header = takeBytes(HEADER);
+      const length = header.readUInt32LE(0);
+      if (buffered < length) {
+        // Not a complete frame yet; put the header back and wait for more
+        // bytes.
+        chunks.unshift(header);
+        buffered += HEADER;
+        return;
+      }
+      const body = takeBytes(length);
       try {
         onFrame(JSON.parse(body.toString('utf8')));
       } catch {
@@ -55,12 +103,16 @@ function sendFrame(socket, message) {
 }
 
 class ParentRpc {
-  constructor(socket) {
+  constructor(socket, onReady = () => {}) {
     this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
     this.eventHandlers = new Map();
     createFrameStream(socket, (message) => {
+      if (message.type === 'ready') {
+        onReady();
+        return;
+      }
       if (message.type === 'response') {
         const pending = this.pending.get(message.id);
         if (pending === undefined) return;
@@ -184,7 +236,14 @@ app.whenReady().then(() => {
       console.error(`[dsh-desktop] ipc connect error: ${err.message}`);
       app.quit();
     });
-    parentRpc = new ParentRpc(socket);
+
+    let parentReady = false;
+    let windowCreated = false;
+
+    parentRpc = new ParentRpc(socket, () => {
+      parentReady = true;
+      maybeCreateWindow();
+    });
 
     protocol.handle(APP_PROTOCOL, async (request) => {
       const body = await request.arrayBuffer();
@@ -196,7 +255,11 @@ app.whenReady().then(() => {
       });
     });
 
-    socket.on('connect', () => {
+    const maybeCreateWindow = () => {
+      if (windowCreated || !parentReady) return;
+      if (socket.readyState !== 'open') return;
+      windowCreated = true;
+
       win = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -217,6 +280,14 @@ app.whenReady().then(() => {
       win.loadURL(`${APP_ORIGIN}/`).catch((err) => {
         console.error(`[dsh-desktop] loadURL failed: ${err?.message ?? err}`);
       });
+    };
+
+    socket.on('connect', maybeCreateWindow);
+    // The parent spawns Electron before its loader has settled. If the IPC
+    // pipe goes away before the `ready` frame arrives, do not leave a
+    // windowless Electron process waiting forever.
+    socket.on('close', () => {
+      if (!windowCreated) app.quit();
     });
   } else {
     win = new BrowserWindow({
