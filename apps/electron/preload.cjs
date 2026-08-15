@@ -1,4 +1,4 @@
-/* global require, document */
+/* global require */
 
 // Preload for the frameless desktop window. Runs with `contextIsolation: false`
 // so it can touch the page DOM; it injects a top drag strip and a custom close
@@ -61,4 +61,143 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', inject, { once: true });
 } else {
   inject();
+}
+
+// ---- offline transport bridge -------------------------------------------
+if (process.env.DSH_ELECTRON_MODE === 'offline') {
+  installFetchBridge();
+  installWebSocketBridge();
+}
+
+function installFetchBridge() {
+  const nativeFetch = window.fetch.bind(window);
+
+  window.fetch = async (input, init) => {
+    const requestUrl = typeof input === 'string' ? input : input?.url;
+    if (requestUrl === undefined || requestUrl === 'undefined') {
+      return nativeFetch(input, init);
+    }
+    const absolute = new URL(requestUrl, window.location.href).href;
+    if (!absolute.startsWith('dsh-desktop://')) {
+      return nativeFetch(input, init);
+    }
+
+    let body;
+    if (init?.body != null) {
+      if (typeof init.body === 'string') body = init.body;
+      else if (init.body instanceof Blob) body = await init.body.text();
+      else if (init.body instanceof Uint8Array)
+        body = new TextDecoder().decode(init.body);
+      else body = String(init.body);
+    }
+
+    const result = await ipcRenderer.invoke('dsh:fetch', {
+      url: absolute,
+      init: {
+        method: init?.method ?? 'GET',
+        headers: init?.headers ?? {},
+        body
+      }
+    });
+
+    const bytes = Uint8Array.from(atob(result.bodyBase64), (ch) =>
+      ch.charCodeAt(0)
+    );
+    return new Response(bytes.length === 0 ? null : bytes, {
+      status: result.status,
+      headers: result.headers
+    });
+  };
+}
+
+function installWebSocketBridge() {
+  const NativeWebSocket = window.WebSocket;
+
+  class IpcWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+
+    constructor(url) {
+      const parsed = new URL(url, window.location.href);
+      this.url = parsed.href;
+      this.readyState = IpcWebSocket.CONNECTING;
+      this._listeners = new Map();
+      this._id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      if (parsed.pathname === '/api/events.mux') this._stream = 'mux';
+      else if (parsed.pathname === '/api/events.host') this._stream = 'host';
+      else this._stream = null;
+
+      this._onIpcEvent = (event, payload) => {
+        if (payload.id !== this._id) return;
+        const envelope = {
+          type: 'server-request',
+          rpcId: payload.frame.rpcId,
+          method: payload.frame.payload?.type,
+          payload: payload.frame.payload
+        };
+        this._dispatch('message', {
+          type: 'message',
+          data: JSON.stringify(envelope)
+        });
+      };
+
+      if (this._stream === null) {
+        queueMicrotask(() => this._dispatch('error', { type: 'error' }));
+        return;
+      }
+      ipcRenderer.on('dsh:event', this._onIpcEvent);
+      ipcRenderer.send('dsh:subscribe', { id: this._id, stream: this._stream });
+      queueMicrotask(() => {
+        this.readyState = IpcWebSocket.OPEN;
+        this._dispatch('open', { type: 'open' });
+      });
+    }
+
+    _dispatch(type, event) {
+      if (this.onmessage !== undefined && type === 'message')
+        this.onmessage(event);
+      if (this.onopen !== undefined && type === 'open') this.onopen(event);
+      if (this.onclose !== undefined && type === 'close') this.onclose(event);
+      if (this.onerror !== undefined && type === 'error') this.onerror(event);
+      for (const fn of this._listeners.get(type) ?? []) fn(event);
+    }
+
+    addEventListener(type, fn) {
+      if (!this._listeners.has(type)) this._listeners.set(type, []);
+      this._listeners.get(type).push(fn);
+    }
+
+    removeEventListener(type, fn) {
+      const list = this._listeners.get(type) ?? [];
+      this._listeners.set(
+        type,
+        list.filter((item) => item !== fn)
+      );
+    }
+
+    send() {
+      // Downlink-only streams: upstream messages are a protocol violation.
+    }
+
+    close() {
+      if (this.readyState === IpcWebSocket.CLOSED) return;
+      this.readyState = IpcWebSocket.CLOSED;
+      ipcRenderer.off('dsh:event', this._onIpcEvent);
+      ipcRenderer.send('dsh:unsubscribe', {
+        id: this._id,
+        stream: this._stream
+      });
+      this._dispatch('close', { type: 'close' });
+    }
+  }
+
+  window.WebSocket = IpcWebSocket;
+  window.WebSocket.CONNECTING = IpcWebSocket.CONNECTING;
+  window.WebSocket.OPEN = IpcWebSocket.OPEN;
+  window.WebSocket.CLOSING = IpcWebSocket.CLOSING;
+  window.WebSocket.CLOSED = IpcWebSocket.CLOSED;
+  void NativeWebSocket;
 }

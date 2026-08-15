@@ -16,8 +16,18 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        setImmediate: 'readonly',
         URL: 'readonly',
-        URLSearchParams: 'readonly'
+        URLSearchParams: 'readonly',
+        Buffer: 'readonly',
+        AbortController: 'readonly',
+        Response: 'readonly',
+        TextDecoder: 'readonly',
+        atob: 'readonly',
+        queueMicrotask: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        Blob: 'readonly'
       }
     }
   }

@@ -1,20 +1,26 @@
-# dsh-desktop — the desktop surface: once the web server binds, launch an
-# Electron window loading the DSH web GUI. The agent is driven by the web-app
-# bundle's dsh-base layer; this patch only adds the Electron launcher surface.
+# dsh-desktop — the desktop surface: launch an Electron window loading the DSH
+# web GUI with no HTTP server. The agent is driven by the web-app bundle's
+# dsh-base layer; this patch replaces the browser-carrier webserver with the
+# desktop surface's own IPC-backed webServer service.
 #
 # New rows go in the `insert:` list; existing rows are patched by id.
 
 - insert:
     - id: desktop
       name: 'dsh-desktop'
-      inject: [webServer]
+      inject: []
 
-# Bind the web server to an OS-assigned port (0) so the desktop surface never
-# collides with `dsh web` (which defaults to 3080).
+# The desktop surface provides a webServer-shaped service that never listens;
+# disable the bundle's real node:http webserver so only that service exists.
 - id: webserver
+  disabled: true
+
+# No real URL exists in the offline desktop shape; keep the web-app glue from
+# printing one or injecting a loopback URL into the model/system prompt.
+- id: web-runtime
   config:
-    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-    port: !!js ctx.webStartup.port ?? 0
+    printUrl: false
+    surfaceContext: false
 
 # DeepSeek model defaults for the desktop surface.
 - id: llm-deepseek

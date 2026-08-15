@@ -2,21 +2,22 @@
 
 Languages: English | [简体中文](./README.zh-CN.md)
 
-> DSH desktop surface: one command starts DSH + the web server + a native Electron window, reusing the DSH Web UI with zero customization.
+> DSH desktop surface: one command starts DSH + a native Electron window with no local HTTP server, reusing the DSH Web UI with zero customization.
 
 ## Overview
 
-`dsh-desktop` is a DSH bundle patch plugin (`cordis.patch.yml`) that provides a surface named `desktop`. When DSH boots with the `desktop` profile, the plugin waits for the web server to bind its port and then launches a native Electron window that loads the DSH Web UI at `http://127.0.0.1:<port>`.
+`dsh-desktop` is a DSH bundle patch plugin (`cordis.patch.yml`) that provides a surface named `desktop`. When DSH boots with the `desktop` profile, the plugin disables DSH's `node:http` web server, provides a non-listening `webServer`-shaped service, and launches a native Electron window that loads the DSH Web UI through a custom `dsh-desktop://` protocol.
 
-Unlike `dsh web`, which only starts the web server and requires you to open a browser manually, `dsh --profile desktop` ships with the agent, web server, and Electron window out of the box. The web server binds an OS-assigned free port (`port 0`), so it never collides with `dsh web`'s default `3080`.
+Unlike `dsh web`, which starts a local HTTP server and requires you to open a browser manually, `dsh --profile desktop` reuses the entire DSH Web frontend and Cordis services with **no TCP listener**: Electron loads the frontend through a custom protocol, and `fetch` plus the event streams are bridged over IPC to the host process.
 
 ## Features
 
 - **One command, ready to use**: `dsh --profile desktop` opens the desktop window automatically — no need to visit the browser.
-- **Port isolation**: the web server binds `port 0` (OS-assigned), avoiding conflicts with `dsh web`'s default `3080`.
+- **No local HTTP server**: no `node:http` and no TCP listening port; static assets, APIs, and event streams all travel over Electron IPC / custom protocol.
+- **Full DSH Web reuse**: the frontend UI, session/workspace persistence, agent, and tools are all provided by DSH's existing Cordis services.
 - **Frameless native window**: the native title bar is removed; a preload script injects a top drag strip and a custom close button in the top-right corner.
 - **Bidirectional shutdown cleanup**:
-  - Closing the Electron window makes DSH dispose itself (shutting down the web server and agent), leaving no orphan processes;
+  - Closing the Electron window makes DSH dispose itself (shutting down the agent and related services), leaving no orphan processes;
   - If the DSH parent process exits, Electron detects it every 2 seconds and quits, leaving no orphan windows.
 
 ## How It Works
@@ -26,15 +27,16 @@ dsh --profile desktop
         │
         ▼
 DSH boot (web-app bundle + desktop patch)
-        │  webServer binds 127.0.0.1:<OS-assigned free port>
+        │  patch disables dsh-host-webserver;
+        │  the desktop plugin provides a non-listening webServer-shaped service
         ▼
 src/index.js apply(ctx)
-        │  after the loader settles, reads ctx.webServer.port and builds the loopback URL
+        │  after the loader settles, spawns Electron and establishes an fd-3 pipe RPC
         ▼
-spawn electron apps/electron/main.js
-        │  URL and parent PID are passed via environment variables (avoids Electron CLI arg parsing crashes)
+Electron creates a frameless BrowserWindow and loads dsh-desktop://app/
+        │  the main process forwards static/API requests over fd-3 to DSH
         ▼
-Electron creates a frameless BrowserWindow and loads http://127.0.0.1:<port>
+preload.cjs bridges fetch/WebSocket → ipcRenderer → main process → fd-3 → DSH services
         │
         ▼
 preload.cjs injects the top drag strip + custom close button
@@ -92,7 +94,7 @@ Notes:
 
 - `dsh plugin add` forwards the remaining arguments to pnpm inside the profile directory, so pnpm's `link:` protocol is supported.
 - In development the plugin resolves `electron` from this repo's `node_modules` (so step 2, `npm install`, is required); if that is missing, it falls back to the packaged Electron runtime under `dist/electron/runtime/`.
-- Apart from Electron, DSH host modules such as `webServer` are resolved by the DSH runtime, so this package declares no runtime dependencies.
+- Apart from Electron, DSH host modules (the web frontend, `dsh-web-app`, `dsh-client-connection`, `dsh-host-apiproxy`, etc.) are resolved by the DSH runtime, so this package declares no runtime dependencies.
 
 ## Usage
 
@@ -132,19 +134,23 @@ Commit conventions:
 ```text
 dsh-desktop/
 ├── src/
-│   ├── index.js               # desktop surface plugin: launches Electron once webServer is ready
+│   ├── index.js               # desktop surface plugin: provides the webServer-shaped service and launches Electron
+│   ├── electron-web-server.js # non-listening webServer service: route registry + IPC dispatch + fallback
+│   ├── ipc-channel.js         # DSH ↔ Electron main-process fd-3 framing + RPC
 │   └── startup.js             # session-identity helper (not referenced by the current patch)
 ├── apps/electron/
-│   ├── main.js                # Electron main process: frameless window, close IPC, parent liveness probe
-│   ├── preload.cjs            # preload: injects the top drag strip + custom close button
+│   ├── main.js                # Electron main process: dsh-desktop:// protocol, fd-3 RPC, frameless window
+│   ├── preload.cjs            # preload: fetch/WebSocket bridge + top drag strip + custom close button
 │   └── package.json           # Electron app metadata
 ├── test/
 │   ├── index.test.js
+│   ├── electron-web-server.test.js
+│   ├── ipc-channel.test.js
 │   └── startup.test.js
 ├── scripts/
 │   └── package.mjs            # packages the Electron runtime + creates release archives
 ├── dist/                      # build output (git-ignored; generated by npm run package / dist)
-├── cordis.patch.yml           # DSH bundle patch: desktop plugin + webServer port + llm-deepseek defaults
+├── cordis.patch.yml           # DSH bundle patch: desktop plugin + disables webserver + suppresses fake URL
 ├── package.json               # package metadata, npm scripts, dsh.bundle.patch pointer
 ├── eslint.config.js
 ├── .prettierrc.json
@@ -161,8 +167,10 @@ The plugin sets the following variables automatically when launching Electron; t
 
 | Variable | Description |
 |------|------|
-| `DSH_ELECTRON_URL` | URL loaded by Electron. The plugin sets it to `http://127.0.0.1:<port>`; standalone default is `http://127.0.0.1:3080` |
+| `DSH_ELECTRON_MODE` | Set to `offline` by the plugin; makes the Electron main process use the `dsh-desktop://` protocol and the fd-3 IPC bridge |
+| `DSH_ELECTRON_IPC_FD` | File descriptor number for the DSH ↔ Electron pipe (default `3`) |
 | `DSH_ELECTRON_PARENT_PID` | Parent process PID. Electron probes it every 2 seconds and quits when the parent exits. The plugin sets it to the DSH process PID; standalone default is `process.ppid` |
+| `DSH_ELECTRON_URL` | URL loaded by Electron when running `apps/electron` standalone in non-offline mode; default `http://127.0.0.1:3080` |
 
 ## License
 
