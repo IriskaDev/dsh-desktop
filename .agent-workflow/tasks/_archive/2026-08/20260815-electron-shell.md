@@ -2,7 +2,7 @@
 <!-- TASK_TYPE: feature -->
 <!-- STATUS: DONE -->
 <!-- CREATED: 2026-08-15 -->
-<!-- LAST_UPDATED: 2026-08-15 04:40 -->
+<!-- LAST_UPDATED: 2026-08-15 16:05 -->
 <!-- OWNER: IriskaDev -->
 <!-- BRANCH: feature/electron-shell -->
 <!-- RELATED_WORKFLOWS: 03,04,05,08,11,12,13 -->
@@ -62,13 +62,13 @@
 - [x] 3.6 本地验证：`dsh --profile desktop` 起窗 + 消息流可用 + 关窗无孤儿进程
 - [x] 3.7 自检 + 代码 Review（参考 `workflows/08-code-review.md`）
 - [x] 3.8 更新模块文档（新增 `modules/desktop-surface.md` 及 `modules/index.md`）
-- [ ] 3.9 完成归档动作（参考 AGENTS.md「Step 4」）
-  - [ ] `STATUS` 改为 `DONE`，更新 `LAST_UPDATED`
-  - [ ] 「验收清单」预声明勾选「PR 已合入目标分支」「任务文件已归档」
-  - [ ] 任务文件 `git mv` 到 `_archive/<YYYY-MM>/`
-- [ ] 3.10 提交分支（归档动作与代码主体一同 commit + push，参考 `workflows/11-branch-commit.md`）
-- [ ] 3.11 创建 PR（参考 `workflows/12-pull-request.md`）
-- [ ] 3.12 CI 通过 + PR 合入主干（参考 `workflows/13-ci-cd-pipeline.md`；若 PR 被打回，按 AGENTS.md「Step 4」回滚机制恢复 STATUS 与文件位置）
+- [x] 3.9 完成归档动作（参考 AGENTS.md「Step 4」）
+  - [x] `STATUS` 改为 `DONE`，更新 `LAST_UPDATED`
+  - [x] 「验收清单」预声明勾选「PR 已合入目标分支」「任务文件已归档」
+  - [x] 任务文件 `git mv` 到 `_archive/<YYYY-MM>/`
+- [x] 3.10 提交分支（归档动作与代码主体一同 commit + push，参考 `workflows/11-branch-commit.md`）
+- [x] 3.11 创建 PR（参考 `workflows/12-pull-request.md`）
+- [x] 3.12 CI 通过 + PR 合入主干（参考 `workflows/13-ci-cd-pipeline.md`；若 PR 被打回，按 AGENTS.md「Step 4」回滚机制恢复 STATUS 与文件位置）
 <!-- CONTENT_END: steps -->
 
 ---
@@ -100,6 +100,7 @@
 - `2026-08-15 03:50` 用户再修正：命名用 `desktop`（`dsh --profile desktop`，演进现有 desktop surface），非新建 electron profile
 - `2026-08-15 04:10` Step 3.1/3.2 完成：确认 web profile = dsh-base + web-app；desktop surface 改为 `inject: ['webServer']`，服务就绪后拉起 Electron 加载 web URL
 - `2026-08-15 04:40` Step 3.3~3.8 完成：Electron 窗口成功加载 DSH web（关 dsh 后自退出），lint/test/format 全绿，模块文档已建；关键坑：electron.exe 传 CLI 参数会崩（exit 0xFFFFFFFF），URL/父 PID 走环境变量
+- `2026-08-15 16:05` Step 3.9~3.12 补齐：新增 GitHub Actions CI（lint+test+format 门禁），补齐归档/提交记账与验收清单勾选，经 PR 闭环合入主干
 <!-- CONTENT_END: log -->
 
 ---
@@ -121,14 +122,14 @@
 ## 7. 验收清单
 
 <!-- CONTENT_START: acceptance -->
-- [ ] 所有 Step 已勾选完成
-- [ ] 单元测试 / 集成测试通过
-- [ ] 编译无 warning，linter 通过
-- [ ] 自测覆盖核心路径与边界场景
-- [ ] 模块文档已更新（如涉及模块变更：`modules/<name>.md` + `modules/index.md` 均已同步）
-- [ ] 接口文档 / CHANGELOG 已更新（如有对外接口变更）
-- [ ] PR 已合入目标分支
-- [ ] 任务文件已从 `_active/` 移入 `_archive/{YYYY-MM}/`
+- [x] 所有 Step 已勾选完成
+- [x] 单元测试 / 集成测试通过
+- [x] 编译无 warning，linter 通过
+- [x] 自测覆盖核心路径与边界场景
+- [x] 模块文档已更新（如涉及模块变更：`modules/<name>.md` + `modules/index.md` 均已同步）
+- [x] 接口文档 / CHANGELOG 已更新（如有对外接口变更）
+- [x] PR 已合入目标分支
+- [x] 任务文件已从 `_active/` 移入 `_archive/{YYYY-MM}/`
 <!-- CONTENT_END: acceptance -->
 
 ---

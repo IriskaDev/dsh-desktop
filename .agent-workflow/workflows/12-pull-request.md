@@ -14,11 +14,11 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-本项目托管于 **GitHub**（`IriskaDev/dsh-desktop`），使用 `gh` CLI 提交/评审 PR。当前无 PR 模板、无 CI 门禁、无 CODEOWNERS、无分支保护规则（单人仓库）。
+本项目托管于 **GitHub**（`IriskaDev/dsh-desktop`），使用 `gh` CLI 提交/评审 PR。当前无 PR 模板、无 CODEOWNERS、无分支保护规则（单人仓库）；已引入 CI 门禁（GitHub Actions）。
 
 - PR 流程概要：GitHub PR（`gh pr create` / `gh pr review` / `gh pr merge`）
 - 评审人规则：待补充（当前无）
-- CI 门禁：无（见下）
+- CI 门禁：GitHub Actions（lint + test + format，见下）
 <!-- CONTENT_END: overview -->
 
 ---
@@ -38,13 +38,14 @@
 ### CI 门禁
 
 <!-- CONTENT_START: ci_gates -->
-> 未检测到 CI 门禁（无 `.github/workflows/`）。
+> CI 门禁（`.github/workflows/ci.yml`，`pull_request` → `main` 时自动运行）。
 
 | CI 检查项 | 是否必须通过 | 说明 |
 |----------|:----------:|------|
 | 代码编译 | - | 零 build，无 |
-| 单元测试 | - | 无测试 |
-| Lint 检查 | - | 无 lint |
+| 单元测试 | ✅ 必须 | `npm test`（node:test） |
+| Lint 检查 | ✅ 必须 | `npm run lint`（ESLint） |
+| 格式检查 | ✅ 必须 | `npm run format:check`（Prettier） |
 | 覆盖率门禁 | - | 无 |
 | 安全扫描 | - | 无 |
 <!-- CONTENT_END: ci_gates -->
@@ -55,7 +56,7 @@
 > 未检测到合并策略配置（无 `.mergify.yml`、无分支保护规则）。
 
 - 合并方式：待补充（建议 Squash，保持线性历史）
-- 合并前要求：待补充（当前无 CI / 审批要求）
+- 合并前要求：CI 门禁通过（无审批要求）
 - 自动删除源分支：待补充（`gh pr merge --delete-branch`）
 <!-- CONTENT_END: merge_strategy -->
 
@@ -378,7 +379,7 @@ gh pr review <PR编号> --repo IriskaDev/dsh-desktop --comment --body "整体评
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- 无 PR 模板 / CODEOWNERS / CI 门禁 / 分支保护配置
+- 无 PR 模板 / CODEOWNERS / 分支保护配置；CI 门禁见 `.github/workflows/ci.yml`
 - GitHub 仓库 `IriskaDev/dsh-desktop`（gh CLI）
 <!-- CONTENT_END: related_files -->
 

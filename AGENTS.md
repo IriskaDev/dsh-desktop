@@ -110,7 +110,7 @@
 | 10 | 代码优化 | 🟡 部分完成 | 2026-08-15 | [查看](.agent-workflow/workflows/10-code-optimization.md) |
 | 11 | 分支提交 | 🟢 已完成 | 2026-08-15 | [查看](.agent-workflow/workflows/11-branch-commit.md) |
 | 12 | PR提交 | 🟡 部分完成 | 2026-08-15 | [查看](.agent-workflow/workflows/12-pull-request.md) |
-| 13 | CI/CD流程 | 🟡 部分完成 | 2026-08-15 | [查看](.agent-workflow/workflows/13-ci-cd-pipeline.md) |
+| 13 | CI/CD流程 | 🟢 已完成 | 2026-08-15 | [查看](.agent-workflow/workflows/13-ci-cd-pipeline.md) |
 | 14 🔧 | 工作流自检（META） | 🟢 模板自带 | N/A | [查看](.agent-workflow/workflows/14-workflow-self-check.md) |
 | 15 🔧 | 模块台账（阶段二强化） | 🟢 模板自带 | N/A | [查看](.agent-workflow/workflows/15-module-inventory.md) |
 | 16 🔧 | 业务调用链推导 | 🟢 模板自带 | N/A | [查看](.agent-workflow/workflows/16-call-chain-derivation.md) |
