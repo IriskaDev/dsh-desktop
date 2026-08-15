@@ -1,5 +1,5 @@
-﻿<!-- MODULE: ci-cd-pipeline -->
-<!-- STATUS: PARTIAL -->
+<!-- MODULE: ci-cd-pipeline -->
+<!-- STATUS: DONE -->
 <!-- LAST_ANALYZED: 2026-08-15 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
@@ -12,10 +12,10 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-未检测到任何 CI/CD 配置（无 `.github/workflows/`、无 `.gitlab-ci.yml`、无 Jenkinsfile 等）。项目托管于 GitHub，未来建议引入 GitHub Actions。
+已引入 GitHub Actions（`.github/workflows/ci.yml`）作为唯一 CI 门禁：`push` 到 `main` 与 `pull_request` 到 `main` 时触发 lint + 测试 + 格式检查。CD（打包分发 GitHub Release）尚未建立。
 
-- CI/CD 平台：无（建议 GitHub Actions）
-- 流水线架构与触发策略：待建立
+- CI/CD 平台：GitHub Actions
+- 流水线架构与触发策略：单 job `check`（checkout → setup-node → npm ci → lint → test → format）
 <!-- CONTENT_END: overview -->
 
 ---
@@ -25,12 +25,12 @@
 ### 触发规则
 
 <!-- CONTENT_START: trigger_rules -->
-> 未检测到 CI 触发规则配置。
+> CI 触发规则（`.github/workflows/ci.yml`）。
 
 | 触发事件 | 触发分支/条件 | 执行的流水线 | 说明 |
 |---------|-------------|------------|------|
-| Push | - | 无 | 待建立 GitHub Actions |
-| Pull Request | - | 无 | 待建立 |
+| Push | `main` | `check` | 主干提交门禁 |
+| Pull Request | → `main` | `check` | PR 门禁 |
 | Tag 创建 | - | 无 | 待建立（发布打包） |
 | 定时触发 | - | 无 | - |
 | 手动触发 | - | 无 | - |
@@ -39,27 +39,23 @@
 ### 流水线阶段
 
 <!-- CONTENT_START: pipeline_stages -->
-> 未检测到流水线配置。以下为未来 GitHub Actions 的参考阶段（待建立）：
+> 当前 CI（`.github/workflows/ci.yml`）的流水线阶段。CD 阶段（制品打包/部署）待建立。
 
 ```mermaid
 graph LR
     A[代码检出] --> B[依赖安装]
-    B --> C[代码检查/Lint]
-    C --> D[编译构建]
-    D --> E[单元测试]
-    E --> F[集成测试]
-    F --> G[制品打包]
-    G --> H[部署]
+    B --> C[Lint]
+    C --> D[单元测试]
+    D --> E[格式检查]
 ```
 
 | 阶段 | 说明 | 是否必须通过 | 超时时间 |
 |------|------|:----------:|---------|
-| 代码检出 | 待建立 | - | - |
-| 依赖安装 | 待建立 | - | - |
-| 代码检查 | 待建立 | - | - |
-| 编译构建 | 零 build | - | - |
-| 单元测试 | 无测试 | - | - |
-| 集成测试 | 无 | - | - |
+| 代码检出 | `actions/checkout@v4` | ✅ | 默认 |
+| 依赖安装 | `npm ci --ignore-scripts`（跳过 electron 二进制下载） | ✅ | 默认 |
+| Lint | `npm run lint`（ESLint） | ✅ | 默认 |
+| 单元测试 | `npm test`（node:test，`test/*.test.js`） | ✅ | 默认 |
+| 格式检查 | `npm run format:check`（Prettier） | ✅ | 默认 |
 | 制品打包 | Electron 打包（待） | - | - |
 | 部署 | GitHub Release（待） | - | - |
 <!-- CONTENT_END: pipeline_stages -->
@@ -69,16 +65,16 @@ graph LR
 ## 自动化检查
 
 <!-- CONTENT_START: automated_checks -->
-> 未检测到 CI 自动化检查项。
+> CI 自动化检查项（`.github/workflows/ci.yml`）。
 
 | 检查项 | 工具 | 阶段 | 失败策略 | 说明 |
 |-------|------|------|---------|------|
-| 代码格式 | （无） | - | - | 待引入 |
-| 静态分析 | （无） | - | - | 待引入 |
-| 单元测试 | （无） | - | - | 无测试 |
-| 覆盖率门禁 | （无） | - | - | 无 |
+| 代码格式 | Prettier | format:check | 失败即阻断 | `npm run format:check` |
+| 静态分析 | ESLint | lint | 失败即阻断 | `npm run lint` |
+| 单元测试 | node:test | test | 失败即阻断 | `npm test`（`test/*.test.js`） |
+| 覆盖率门禁 | （无） | - | - | 未启用 |
 | 安全扫描 | （无） | - | - | 待引入 |
-| 依赖漏洞检查 | （无） | - | - | 零依赖 |
+| 依赖漏洞检查 | （无） | - | - | 零运行时依赖 |
 | 构建产物校验 | （无） | - | - | 零 build |
 <!-- CONTENT_END: automated_checks -->
 
@@ -154,7 +150,7 @@ graph LR
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- 无 CI/CD 配置文件
+- `.github/workflows/ci.yml` — GitHub Actions CI（lint + test + format 门禁）
 - `.gitignore` — 忽略 `dist/`、`node_modules/`
 <!-- CONTENT_END: related_files -->
 
