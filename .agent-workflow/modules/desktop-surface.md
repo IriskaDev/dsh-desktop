@@ -14,7 +14,7 @@
 ## 功能概述
 
 <!-- CONTENT_START: overview -->
-desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + webserver + Electron 原生窗口，不依赖 `dsh web`。它在 `webServer` 服务绑定端口后 spawn Electron（`apps/electron/main.js`）加载 `http://127.0.0.1:<port>`；webserver 用 `port 0`（OS 分配空闲端口）避免与 `dsh web`（默认 3080）冲突。agent 由 web-app bundle 的 dsh-base 层驱动，本插件只负责拉起窗口。
+desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + webserver + Electron 原生窗口，不依赖 `dsh web`。它在 `webServer` 服务绑定端口后 spawn Electron（`apps/electron/main.js`）加载 `http://127.0.0.1:<port>`；webserver 用 `port 0`（OS 分配空闲端口）避免与 `dsh web`（默认 3080）冲突。agent 由 web-app bundle 的 dsh-base 层驱动，本插件只负责拉起窗口。窗口为无边框（`frame: false`）：无原生标题栏/关闭按钮，由 preload 注入顶部拖拽条 + 右上角自定义「✕」关闭按钮。
 <!-- CONTENT_END: overview -->
 
 ---
@@ -90,6 +90,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - electron 需作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）。
 - Electron 窗口通过 parentWatch 每 2s 探测父进程（dsh）存活，父进程退出即 `app.quit()`，避免孤儿窗口。
 - **双向清理**：dsh 侧监听 Electron 的 `exit` 事件，窗口关闭 → `ctx.root.fiber.dispose()` 关掉整个 dsh 实例（webserver + agent 一并退出），避免 webserver 成为孤儿进程。
+- **无边框窗口**（`frame: false`）：去掉了原生标题栏与原生关闭按钮；`apps/electron/preload.cjs`（`contextIsolation: false`）注入顶部 32px 透明拖拽条（`-webkit-app-region: drag`，用于移动窗口）和右上角「✕」关闭按钮（点按经 `ipcRenderer` 发 `dsh-desktop:close`，主进程 `win.close()`）。顶部 32px 为拖拽区，会拦截该区域的页面鼠标事件（页面该区域内容不可点）。
 - `src/startup.js`（旧 desktop-startup）已不再被 patch 引用，属遗留代码。
 <!-- CONTENT_END: caution -->
 
@@ -99,7 +100,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: related_files -->
 - `src/index.js` — desktop surface（electron launcher）
-- `apps/electron/main.js` — Electron 主进程（BrowserWindow 加载 URL + 退出清理）
+- `apps/electron/main.js` — Electron 主进程（无边框 BrowserWindow + 关闭 IPC + 退出清理）
+- `apps/electron/preload.cjs` — preload（注入顶部拖拽条 + 自定义关闭按钮）
 - `apps/electron/package.json` — Electron 应用元数据
 - `cordis.patch.yml` — 插件编排（desktop surface + llm-deepseek）
 - `test/index.test.js`、`test/startup.test.js` — 单元测试
