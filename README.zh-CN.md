@@ -49,6 +49,27 @@ preload.cjs 注入顶部拖拽条 + 自定义关闭按钮
 
 ## 安装
 
+### 方式一：下载 Release（推荐，无需 npm install）
+
+1. 在 [Releases](../../releases) 页下载与你的系统匹配的压缩包，例如
+   `dsh-desktop-0.1.0-win32-x64.zip`（Windows）、
+   `dsh-desktop-0.1.0-linux-x64.tar.gz`（Linux）或
+   `dsh-desktop-0.1.0-darwin-*`（macOS）。
+2. 解压到任意目录。
+3. 将解压目录链接到 DSH 的 desktop profile：
+
+```bash
+# Windows
+dsh plugin --profile desktop add link:D:\path\to\dsh-desktop-0.1.0-win32-x64
+
+# macOS / Linux
+dsh plugin --profile desktop add "link:/path/to/dsh-desktop-0.1.0-linux-x64"
+```
+
+Release 包已内置对应平台的 Electron 运行时（`dist/electron/runtime/`），插件会优先使用它，因此**不需要执行 `npm install`**。
+
+### 方式二：源码安装（开发）
+
 ```bash
 # 1. 克隆并进入项目
 git clone <repo-url>
@@ -68,7 +89,7 @@ dsh plugin --profile desktop add "link:$(pwd)"
 说明：
 
 - `dsh plugin add` 会把剩余参数转发给 profile 目录下的 pnpm 执行，因此支持 pnpm 的 `link:` 协议。
-- 插件运行时会从本仓库的 `node_modules` 解析 `electron`，因此第 2 步的 `npm install` 必须执行。
+- 开发态插件会从本仓库的 `node_modules` 解析 `electron`（因此第 2 步的 `npm install` 必须执行）；若检测不到，会回退到 `dist/electron/runtime/` 中打包好的 Electron 运行时。
 - 除 Electron 外，`webServer` 等 DSH 宿主模块由 DSH 运行时解析，本包无需声明运行时依赖。
 
 ## 使用
@@ -96,6 +117,8 @@ dsh --profile desktop --help
 | `npm run lint:fix` | ESLint 自动修复 |
 | `npm run format` | Prettier 格式化 |
 | `npm run format:check` | Prettier 格式检查（CI 同款） |
+| `npm run package` | 将 `apps/electron` 打包为当前平台的 Electron 运行时到 `dist/electron/runtime/` |
+| `npm run dist` | 打包运行时并生成发布压缩包到 `dist/release/`（可加 `-- --platform=win32 --arch=x64` 覆盖平台/架构） |
 
 提交规范：
 
@@ -116,6 +139,9 @@ dsh-desktop/
 ├── test/
 │   ├── index.test.js
 │   └── startup.test.js
+├── scripts/
+│   └── package.mjs            # 打包 Electron 运行时 + 生成发布压缩包
+├── dist/                      # 打包产物（git 忽略；npm run package / dist 生成）
 ├── cordis.patch.yml           # DSH bundle patch：desktop 插件 + webServer 端口 + llm-deepseek 默认值
 ├── package.json               # 包元数据、npm scripts、dsh.bundle.patch 指向
 ├── eslint.config.js

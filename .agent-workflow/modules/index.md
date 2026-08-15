@@ -19,7 +19,7 @@
 
 | 模块ID | 名称 | 类型 | 职责概述 | 状态 | 时效 | 最后更新 | 关键词 | 文件链接 |
 |--------|------|:----:|---------|:----:|:----:|:--------:|--------|----------|
-| desktop-surface | desktop surface（Electron 桌面外壳） | MODULE | `dsh --profile desktop` 起 Electron 原生窗口加载 DSH web，零定制复用 | 🟢 已完成 | 🟢 有效 | 2026-08-15 | desktop,electron,surface,web,launcher | [desktop-surface.md](./desktop-surface.md) |
+| desktop-surface | desktop surface（Electron 桌面外壳） | MODULE | `dsh --profile desktop` 起 Electron 原生窗口加载 DSH web，零定制复用；支持打包 Electron 运行时发 Release | 🟢 已完成 | 🟢 有效 | 2026-08-15 | desktop,electron,surface,web,launcher,release,package | [desktop-surface.md](./desktop-surface.md) |
 
 **类型说明**：`GROUP`（大模块，含 ≥3 个子模块） · `MODULE`（顶层单模块，无子模块）
 **状态说明**：🔴 待分析 | 🟡 部分完成 | 🟢 已完成

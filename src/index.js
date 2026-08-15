@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const name = 'desktop';
@@ -9,6 +11,47 @@ const require = createRequire(import.meta.url);
 const ELECTRON_MAIN = fileURLToPath(
   new URL('../apps/electron/main.js', import.meta.url)
 );
+const PACKAGED_RUNTIME_DIR = fileURLToPath(
+  new URL('../dist/electron/runtime', import.meta.url)
+);
+
+function packagedElectronPath() {
+  if (process.platform === 'win32') {
+    return join(PACKAGED_RUNTIME_DIR, 'dsh-desktop-electron.exe');
+  }
+  if (process.platform === 'darwin') {
+    return join(
+      PACKAGED_RUNTIME_DIR,
+      'dsh-desktop-electron.app',
+      'Contents',
+      'MacOS',
+      'dsh-desktop-electron'
+    );
+  }
+  return join(PACKAGED_RUNTIME_DIR, 'dsh-desktop-electron');
+}
+
+/**
+ * Resolve how to launch Electron:
+ * - DSH_ELECTRON_BIN: explicit override (packaged app, no extra args).
+ * - node_modules/electron: development checkout.
+ * - dist/electron/runtime: packaged runtime shipped in a release archive.
+ */
+function resolveElectron() {
+  if (process.env.DSH_ELECTRON_BIN) {
+    return { electronPath: process.env.DSH_ELECTRON_BIN, args: [] };
+  }
+  try {
+    return { electronPath: require('electron'), args: [ELECTRON_MAIN] };
+  } catch {
+    // Fall through to the packaged runtime.
+  }
+  const packagedPath = packagedElectronPath();
+  if (existsSync(packagedPath)) {
+    return { electronPath: packagedPath, args: [] };
+  }
+  return null;
+}
 
 /**
  * The desktop surface: once the web server binds, launch an Electron window
@@ -26,19 +69,18 @@ export function apply(ctx) {
     }
     const url = `http://127.0.0.1:${String(port)}`;
 
-    let electronPath;
-    try {
-      electronPath = require('electron');
-    } catch {
+    const electron = resolveElectron();
+    if (!electron) {
       ctx.logger?.warn?.(
-        'desktop: electron is not installed; skipping Electron launch'
+        'desktop: electron is not available; skipping Electron launch'
       );
       return;
     }
 
     // Pass the URL and parent PID via env vars: Electron's CLI arg parsing can
-    // crash (exit 0xFFFFFFFF) when it sees URL-like arguments.
-    const child = spawn(electronPath, [ELECTRON_MAIN], {
+    // crash (exit 0xFFFFFFFF) when it sees URL-like arguments. Packaged apps
+    // already bundle main.js, so they are spawned without extra args.
+    const child = spawn(electron.electronPath, electron.args, {
       stdio: 'ignore',
       env: {
         ...process.env,
