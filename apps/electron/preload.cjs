@@ -10,13 +10,25 @@ const CLOSE_CHANNEL = 'dsh-desktop:close';
 const TITLEBAR_ID = 'dsh-desktop-titlebar';
 const CLOSE_ID = 'dsh-desktop-close';
 
+// The DSH web header reserves a 12px empty top padding above its title row
+// (where the Session log button lives). Keep the drag strip inside that dead
+// zone so it does not cover the Session log button, and keep the close button
+// in the header's 28px right padding so it sits beside the button instead of
+// on top of it.
+const TITLEBAR_HEIGHT = 12;
+const CLOSE_WIDTH = 28;
+const CLOSE_HEIGHT = 32;
+
 const STYLE = [
   `#${TITLEBAR_ID}{`,
-  'position:fixed;top:0;left:0;right:0;height:32px;z-index:2147483647;',
+  'position:fixed;top:0;left:0;right:0;',
+  `height:${TITLEBAR_HEIGHT}px;z-index:2147483647;`,
   '-webkit-app-region:drag;display:flex;align-items:stretch;justify-content:flex-end;',
   '}',
   `#${CLOSE_ID}{`,
-  '-webkit-app-region:no-drag;width:46px;border:0;padding:0;',
+  'position:absolute;top:0;right:0;',
+  `width:${CLOSE_WIDTH}px;height:${CLOSE_HEIGHT}px;`,
+  '-webkit-app-region:no-drag;border:0;padding:0;',
   'background:transparent;color:#9aa0a6;font-size:15px;line-height:1;',
   'cursor:pointer;appearance:none;-webkit-appearance:none;',
   '}',
