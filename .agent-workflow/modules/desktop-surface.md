@@ -52,7 +52,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: upstream_dependencies -->
 - `webServer`（`@deepseek-ai/dsh-host-webserver`）：读其 `.port` 得到绑定端口，拼出 loopback URL
-- `electron`（第三方，devDependency）：`require('electron')` 得到 electron.exe 路径用于 spawn
+- `electron`（第三方，devDependency）：开发态 `require('electron')` 得到 electron 可执行文件路径用于 spawn；若解析失败则回退到 `dist/electron/runtime/` 打包好的 Electron 运行时（Release 包内置）
 <!-- CONTENT_END: upstream_dependencies -->
 
 ---
@@ -69,7 +69,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: downstream_data_calls -->
 - 无数据库 / MQ / 外部 HTTP 调用
-- **spawn 子进程**：`electron`（`apps/electron/main.js`）— 加载 DSH web 前端
+- **spawn 子进程**：`electron`（`apps/electron/main.js`）— 加载 DSH web 前端；发布态直接 spawn `dist/electron/runtime/` 内打包好的 Electron 可执行文件（无 argv，URL/父 PID 走环境变量）
 <!-- CONTENT_END: downstream_data_calls -->
 
 ---
@@ -87,7 +87,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: caution -->
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量（`DSH_ELECTRON_URL` / `DSH_ELECTRON_PARENT_PID`），不走 argv。
-- electron 需作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）。
+- electron 开发态作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）；Release 包无需 npm install，插件回退到 `dist/electron/runtime/`（`scripts/package.mjs` 打包生成）。
+- `scripts/package.mjs` 用 `@electron/packager` 把 `apps/electron` 打成各平台运行时（`asar: false`），`npm run dist` 额外生成发布压缩包到 `dist/release/`。
 - Electron 窗口通过 parentWatch 每 2s 探测父进程（dsh）存活，父进程退出即 `app.quit()`，避免孤儿窗口。
 - **双向清理**：dsh 侧监听 Electron 的 `exit` 事件，窗口关闭 → `ctx.root.fiber.dispose()` 关掉整个 dsh 实例（webserver + agent 一并退出），避免 webserver 成为孤儿进程。
 - **无边框窗口**（`frame: false`）：去掉了原生标题栏与原生关闭按钮；`apps/electron/preload.cjs`（`contextIsolation: false`）注入顶部 12px 透明拖拽条（`-webkit-app-region: drag`，用于移动窗口）和右上角「✕」关闭按钮（28×32，位于 DSH 头部右侧 28px padding 内；点按经 `ipcRenderer` 发 `dsh-desktop:close`，主进程 `win.close()`）。顶部 12px 为拖拽区，会拦截该区域的页面鼠标事件，但该区域是 DSH 头部的空白 padding，不遮挡 Session log 按钮。
@@ -103,6 +104,9 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `apps/electron/main.js` — Electron 主进程（无边框 BrowserWindow + 关闭 IPC + 退出清理）
 - `apps/electron/preload.cjs` — preload（注入顶部拖拽条 + 自定义关闭按钮）
 - `apps/electron/package.json` — Electron 应用元数据
+- `scripts/package.mjs` — 打包 Electron 运行时 + 生成发布压缩包
+- `.github/workflows/release.yml` — 推 `v*` tag 时构建三平台产物并创建 GitHub Release
+- `dist/electron/runtime/` — 打包产物（git 忽略），发布态 Electron 运行时
 - `cordis.patch.yml` — 插件编排（desktop surface + llm-deepseek）
 - `test/index.test.js`、`test/startup.test.js` — 单元测试
 <!-- CONTENT_END: related_files -->

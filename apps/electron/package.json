@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "main": "main.js",
+  "author": "IriskaDev",
+  "description": "Electron shell for the dsh-desktop DSH surface",
   "scripts": {
     "start": "electron main.js"
   }
