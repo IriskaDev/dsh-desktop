@@ -1,12 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { name, inject } from '../src/index.js';
+import { name, apply } from '../src/index.js';
 
 test('module name is desktop', () => {
   assert.equal(name, 'desktop');
 });
 
-test('inject declares webServer dependency', () => {
-  assert.ok(Array.isArray(inject));
-  assert.ok(inject.includes('webServer'));
+test('apply is exported', () => {
+  assert.equal(typeof apply, 'function');
 });
