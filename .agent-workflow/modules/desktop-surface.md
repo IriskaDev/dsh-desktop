@@ -89,6 +89,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量（`DSH_ELECTRON_URL` / `DSH_ELECTRON_PARENT_PID`），不走 argv。
 - electron 需作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）。
 - Electron 窗口通过 parentWatch 每 2s 探测父进程（dsh）存活，父进程退出即 `app.quit()`，避免孤儿窗口。
+- **双向清理**：dsh 侧监听 Electron 的 `exit` 事件，窗口关闭 → `ctx.root.fiber.dispose()` 关掉整个 dsh 实例（webserver + agent 一并退出），避免 webserver 成为孤儿进程。
 - `src/startup.js`（旧 desktop-startup）已不再被 patch 引用，属遗留代码。
 <!-- CONTENT_END: caution -->
 

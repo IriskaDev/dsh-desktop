@@ -49,6 +49,15 @@ export function apply(ctx) {
     child.on('error', (err) => {
       ctx.logger?.warn?.(`desktop: failed to launch Electron: ${err.message}`);
     });
+    // When the window closes (Electron exits), shut down the whole dsh instance
+    // so the web server and agent do not linger as orphans.
+    child.on('exit', () => {
+      const timer = setTimeout(() => process.exit(0), 2000);
+      void ctx.root.fiber.dispose().then(() => {
+        clearTimeout(timer);
+        process.exit(0);
+      });
+    });
   };
 
   // Defer until the loader settles so the webServer has bound its port.
