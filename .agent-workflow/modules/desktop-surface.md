@@ -2,7 +2,7 @@
 <!-- MODULE_GROUP: - -->
 <!-- INVOLVED_CHAINS: - -->
 <!-- STATUS: DONE -->
-<!-- LAST_ANALYZED: 2026-08-15 -->
+<!-- LAST_ANALYZED: 2026-08-16 -->
 <!-- ANALYZER_VERSION: 1.6 -->
 
 # desktop surface（Electron 桌面外壳，无后台服务）
@@ -14,7 +14,7 @@
 ## 功能概述
 
 <!-- CONTENT_START: overview -->
-desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经 fd-3 管道 RPC 转发给 DSH 侧 dispatch。事件流（mux/host）由 DSH 侧注入 `apiProxy` 获取，经同一管道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口为无边框（`frame: false`）：无原生标题栏/关闭按钮，由 preload 注入顶部 12px 透明拖拽条 + 右上角自定义「✕」关闭按钮。
+desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经本地 IPC（命名管道/Unix socket）RPC 转发给 DSH 侧 dispatch。事件流（mux/host）由 DSH 侧注入 `apiProxy` 获取，经同一 IPC 通道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口为无边框（`frame: false`）：无原生标题栏/关闭按钮，由 preload 注入顶部 12px 透明拖拽条 + 右上角自定义「✕」关闭按钮。
 <!-- CONTENT_END: overview -->
 
 ---
@@ -25,7 +25,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 | 类型 | 入口标识 | 触发函数 | 说明 |
 |------|---------|---------|------|
 | CLI | `dsh --profile desktop` | `apply(ctx)` | boot desktop profile，拉起 Electron 窗口 |
-| 内部函数 | `desktop`（插件 name） | `apply` | 提供 `webServer` 兼容服务，loader 结算后 spawn Electron |
+| 内部函数 | `desktop`（插件 name） | `apply` | 提供 `webServer` 兼容服务，apply 时立即 spawn Electron，loader 结算后发 `ready` 帧再开窗 |
 <!-- CONTENT_END: entry_points -->
 
 ---
@@ -33,7 +33,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 数据流向
 
 <!-- CONTENT_START: data_flow -->
-`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver、关闭 printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → `dsh-web-app`/`dsh-client-connection` 注册 route/fallback → loader 结算后 spawn `electron apps/electron/main.js`（fd-3 管道 + 父 PID 经环境变量传入）→ Electron 窗口加载 `dsh-desktop://app/` → 主进程 `protocol.handle` 把静态/API 请求经 fd-3 RPC 转发给 DSH → preload 覆盖 `fetch`/`WebSocket` 桥接到 ipcRenderer → 渲染进程显示 DSH web 前端。
+`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver、关闭 printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 apiProxy 就绪后 DSH 侧发 `ready` 帧 → Electron 主进程才创建窗口并加载 `dsh-desktop://app/` → 主进程 `protocol.handle` 把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch`/`WebSocket` 桥接到 ipcRenderer → 渲染进程显示 DSH web 前端。
 <!-- CONTENT_END: data_flow -->
 
 ---
@@ -44,7 +44,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `name = 'desktop'` — 插件名
 - `apply(ctx)` — 提供 `webServer` 兼容服务、注册 `apiProxy` 事件源、spawn Electron
 - `createElectronWebServer()` — 不监听的 webServer 服务：`register` / `registerUpgrade` / `registerFallback` / `tapIndex` / `applyIndexTaps` / `dispatch`
-- `createParentIpcChannel(socket, handlers)` — DSH 侧 fd-3 帧协议与 RPC
+- `createParentIpcChannel(socket, handlers)` — DSH 侧 IPC 帧协议与 RPC（4 字节 little-endian 长度 + UTF-8 JSON）
+- `sendFrame(socket, message)` — DSH 侧发送 IPC 帧，含 `{ type: 'ready' }` 就绪帧
 <!-- CONTENT_END: core_interfaces -->
 
 ---
@@ -80,9 +81,9 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: data_structures -->
 - `DSH_ELECTRON_MODE=offline`（env）— 通知 Electron 主进程启用无后台模式
-- `DSH_ELECTRON_IPC_FD=3`（env）— fd-3 管道文件描述符编号
+- `DSH_ELECTRON_IPC_PATH`（env）— DSH ↔ Electron 的命名管道/Unix socket 路径
 - `DSH_ELECTRON_PARENT_PID`（env）— 传给 Electron 的父进程 PID（用于自退出检测）
-- IPC 帧：4 字节 little-endian 长度 + UTF-8 JSON
+- IPC 帧：4 字节 little-endian 长度 + UTF-8 JSON；新增 `{ type: 'ready' }` 帧用于通知 Electron 路由已就绪
 <!-- CONTENT_END: data_structures -->
 
 ---
@@ -91,7 +92,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: caution -->
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量，不走 argv。
-- **fd-3 管道**：DSH 与 Electron 主进程经 `spawn` 的第 4 个 stdio（fd 3）通信；Electron 侧用 `net.Socket({ fd })` 接入。父进程先退出时该管道自动关闭。
+- **本地 IPC**：DSH 与 Electron 主进程经命名管道（Windows `\\.\pipe\...`）或 Unix socket 通信；Electron 侧用 `net.connect(DSH_ELECTRON_IPC_PATH)` 接入。父进程先退出时该通道自动关闭。
+- **启动并行化**：`apply` 阶段即 spawn Electron，让 Electron 冷启动与 DSH loader 结算重叠；DSH 侧在 loader 结算 + `apiProxy` 就绪后发送 `ready` 帧，Electron 收到后才创建窗口，避免路由未注册就发起首屏请求。
 - **事件流不走 WebSocket**：渲染进程的 `WebSocket` 被 preload 覆盖为 IPC 订阅，主进程经 fd-3 向 DSH 订阅 `apiProxy.events.mux/host`，帧经 `webContents.send` 推送。
 - **patch 编排**：`cordis.patch.yml` 禁用 `webserver`（`dsh-host-webserver`）并关闭 `web-runtime` 的 `printUrl`/`surfaceContext`，避免生成假 URL。
 - electron 开发态作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）；Release 包无需 npm install，插件回退到 `dist/electron/runtime/`（`scripts/package.mjs` 打包生成）。

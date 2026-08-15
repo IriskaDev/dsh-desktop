@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { createElectronWebServer } from './electron-web-server.js';
-import { createParentIpcChannel } from './ipc-channel.js';
+import { createParentIpcChannel, sendFrame } from './ipc-channel.js';
 
 export const name = 'desktop';
 
@@ -78,9 +78,24 @@ export function apply(ctx) {
     }
   });
 
+  const channels = new Set();
+  const sockets = new Set();
+  let child;
+  let ipcServer;
+  let ready = false;
+  let readyFailed = false;
+
+  const sendReady = (socket) => {
+    if (!ready || socket.destroyed) return;
+    try {
+      sendFrame(socket, { type: 'ready' });
+    } catch {
+      // The socket may have closed between the destroyed check and the write.
+    }
+  };
+
   const launch = () => {
     const electron = resolveElectron();
-    const channels = new Set();
     if (!electron) {
       ctx.logger?.warn?.(
         'desktop: electron is not available; skipping Electron launch'
@@ -96,7 +111,8 @@ export function apply(ctx) {
         ? `\\\\.\\pipe\\dsh-desktop-${process.pid}-${randomUUID()}`
         : join(os.tmpdir(), `dsh-desktop-${process.pid}-${randomUUID()}.sock`);
 
-    const ipcServer = net.createServer((socket) => {
+    ipcServer = net.createServer((socket) => {
+      sockets.add(socket);
       const channel = createParentIpcChannel(socket, {
         request: async (payload) => {
           const body =
@@ -146,7 +162,13 @@ export function apply(ctx) {
         }
       });
       channels.add(channel);
-      socket.on('close', () => channels.delete(channel));
+      socket.on('close', () => {
+        sockets.delete(socket);
+        channels.delete(channel);
+      });
+      // If the parent finished booting before this socket connected, the
+      // shell would otherwise wait forever; deliver the ready frame now.
+      sendReady(socket);
     });
 
     ipcServer.on('error', (err) => {
@@ -154,7 +176,7 @@ export function apply(ctx) {
     });
 
     ipcServer.listen(ipcPath, () => {
-      const child = spawn(electron.electronPath, electron.args, {
+      child = spawn(electron.electronPath, electron.args, {
         stdio: ['ignore', 'inherit', 'inherit'],
         env: {
           ...process.env,
@@ -175,6 +197,9 @@ export function apply(ctx) {
       child.on('exit', () => {
         for (const channel of channels) channel.close();
         ipcServer.close();
+        // A loader/apiProxy boot failure already owns the DSH error path;
+        // exiting here would mask it with a clean 0 exit.
+        if (readyFailed) return;
         const timer = setTimeout(() => process.exit(0), 2000);
         void ctx.root.fiber.dispose().then(() => {
           clearTimeout(timer);
@@ -184,13 +209,25 @@ export function apply(ctx) {
     });
   };
 
-  // Defer until the loader settles so the webServer routes are registered.
-  const settled = ctx.get('loader')?.await?.();
-  const ready = Promise.all([settled ?? Promise.resolve(), apiReady]);
-  void ready.then(
+  // Launch Electron immediately: its cold start now overlaps with the DSH
+  // loader settling. The shell waits for the `ready` frame before loadURL,
+  // so routes are still registered before the first request.
+  launch();
+
+  // Send `ready` once the loader has settled (webServer routes registered)
+  // and the apiProxy event streams are available.
+  const settled = Promise.resolve().then(() => ctx.get('loader')?.await?.());
+  void Promise.all([settled, apiReady]).then(
     () => {
-      if (ctx.get('webServer') !== undefined) launch();
+      if (ctx.get('webServer') === undefined) return;
+      ready = true;
+      for (const socket of [...sockets]) sendReady(socket);
     },
-    () => {}
+    () => {
+      readyFailed = true;
+      for (const socket of [...sockets]) socket.destroy();
+      ipcServer?.close();
+      child?.kill();
+    }
   );
 }
