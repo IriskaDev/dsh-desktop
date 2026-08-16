@@ -33,7 +33,7 @@ DSH boot（web-app bundle + desktop patch）
 src/index.js apply(ctx)
         │  loader 结算后 spawn Electron，经 fd-3 管道建立 RPC
         ▼
-Electron 创建无边框 BrowserWindow，加载 dsh-desktop://app/
+Electron 创建无边框 BrowserWindow，加载 dsh-desktop://127.0.0.1/
         │  主进程 protocol.handle 把静态资源/API 请求经 fd-3 转发给 DSH
         ▼
 preload.cjs 覆盖 fetch/WebSocket → ipcRenderer → 主进程 → fd-3 → DSH 服务
