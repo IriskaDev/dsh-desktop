@@ -2,7 +2,7 @@
 <!-- MODULE_GROUP: - -->
 <!-- INVOLVED_CHAINS: - -->
 <!-- STATUS: DONE -->
-<!-- LAST_ANALYZED: 2026-08-16 -->
+<!-- LAST_ANALYZED: 2026-08-17 -->
 <!-- ANALYZER_VERSION: 1.6 -->
 
 # desktop surface（Electron 桌面外壳，无后台服务）
@@ -33,7 +33,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 数据流向
 
 <!-- CONTENT_START: data_flow -->
-`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver、关闭 printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 apiProxy 就绪后 DSH 侧发 `ready` 帧 → Electron 主进程才创建窗口并加载 `dsh-desktop://app/` → 主进程 `protocol.handle` 把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch`/`WebSocket` 桥接到 ipcRenderer → 渲染进程显示 DSH web 前端。
+`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver、关闭 printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 apiProxy 就绪后 DSH 侧发 `ready` 帧 → Electron 主进程才创建窗口并加载 `dsh-desktop://127.0.0.1/` → 主进程 `protocol.handle` 把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch`/`WebSocket` 桥接到 ipcRenderer → 渲染进程显示 DSH web 前端。
 <!-- CONTENT_END: data_flow -->
 
 ---
@@ -100,6 +100,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `scripts/package.mjs` 用 `@electron/packager` 把 `apps/electron` 打成各平台运行时（`asar: false`），`npm run dist` 额外生成发布压缩包到 `dist/release/`。
 - Electron 窗口通过 parentWatch 每 2s 探测父进程（dsh）存活，父进程退出即 `app.quit()`，避免孤儿窗口。
 - **双向清理**：dsh 侧监听 Electron 的 `exit` 事件，窗口关闭 → `ctx.root.fiber.dispose()` 关掉整个 dsh 实例（agent + 相关服务一并退出），避免孤儿进程。
+- **APP_ORIGIN 必须用 `127.0.0.1`**：Electron 用 `dsh-desktop://127.0.0.1/` 加载前端（不是 `dsh-desktop://app/`）。DSH 客户端的 `connection.isLoopback` 按 `location.hostname` 判定，只有 `localhost`/`[::1]`/`127.x` 才算 loopback；`app` 会被判为远程，settings 持久化会退化为 memory，导致语言/主题等设置重启后重置。
 - **无边框窗口**（`frame: false`）：去掉了原生标题栏与原生关闭按钮；`apps/electron/preload.cjs`（`contextIsolation: false`）注入顶部 12px 透明拖拽条（`-webkit-app-region: drag`，用于移动窗口）和右上角「✕」关闭按钮（28×32，位于 DSH 头部右侧 28px padding 内；点按经 `ipcRenderer` 发 `dsh-desktop:close`，主进程 `win.close()`）。顶部 12px 为拖拽区，会拦截该区域的页面鼠标事件，但该区域是 DSH 头部的空白 padding，不遮挡 Session log 按钮。
 - `src/startup.js`（旧 desktop-startup）已不再被 patch 引用，属遗留代码。
 <!-- CONTENT_END: caution -->

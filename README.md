@@ -33,7 +33,7 @@ DSH boot (web-app bundle + desktop patch)
 src/index.js apply(ctx)
         │  after the loader settles, spawns Electron and establishes an fd-3 pipe RPC
         ▼
-Electron creates a frameless BrowserWindow and loads dsh-desktop://app/
+Electron creates a frameless BrowserWindow and loads dsh-desktop://127.0.0.1/
         │  the main process forwards static/API requests over fd-3 to DSH
         ▼
 preload.cjs bridges fetch/WebSocket → ipcRenderer → main process → fd-3 → DSH services

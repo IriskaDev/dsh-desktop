@@ -9,7 +9,7 @@ const parentPid = Number(process.env.DSH_ELECTRON_PARENT_PID ?? process.ppid);
 const preload = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
 const APP_PROTOCOL = 'dsh-desktop';
-const APP_ORIGIN = `${APP_PROTOCOL}://app`;
+const APP_ORIGIN = `${APP_PROTOCOL}://127.0.0.1`;
 
 // Must run before app.whenReady(); marks the custom scheme as a standard,
 // secure origin so relative URLs, fetch, and subresource loading behave like
