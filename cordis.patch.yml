@@ -16,9 +16,11 @@
   disabled: true
 
 # No real URL exists in the offline desktop shape; keep the web-app glue from
-# printing one or injecting a loopback URL into the model/system prompt.
+# printing one, opening it in the default browser, or injecting a loopback URL
+# into the model/system prompt. The Electron window is the only surface.
 - id: web-runtime
   config:
+    openBrowser: false
     printUrl: false
     surfaceContext: false
 

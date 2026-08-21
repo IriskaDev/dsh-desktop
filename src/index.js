@@ -60,7 +60,7 @@ function resolveElectron() {
  * those routes over the fd-3 IPC pipe.
  */
 export function apply(ctx) {
-  const webServer = createElectronWebServer();
+  const webServer = createElectronWebServer(ctx);
   ctx.provide('webServer', webServer);
 
   // The /api event downlinks (`mux` and `host`) are exposed by apiProxy as

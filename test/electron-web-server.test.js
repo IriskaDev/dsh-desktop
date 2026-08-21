@@ -83,6 +83,93 @@ test('fallback answers unmatched paths and applyIndexTaps transforms index html'
   assert.equal(other.status, 404);
 });
 
+test('renderIndex renders structured injections then applies raw taps', () => {
+  const rows = [];
+  const ctx = {
+    emit(event, table) {
+      assert.equal(event, 'webserver/index-inject');
+      table.push(...rows);
+    }
+  };
+  const server = createElectronWebServer(ctx);
+  server.tapIndex((html) => html.replace('__TITLE__', 'DSH'));
+  rows.push({
+    kind: 'script-src',
+    placement: 'head',
+    src: '/plugins/app.js'
+  });
+  rows.push({
+    kind: 'html',
+    placement: 'body',
+    html: '<div id="root"></div>'
+  });
+
+  const html = server.renderIndex(
+    '<html><head><title>__TITLE__</title></head><body></body></html>'
+  );
+  assert.match(html, /<script src="\/plugins\/app\.js"><\/script>/);
+  assert.match(html, /<div id="root"><\/div>/);
+  assert.match(html, /<title>DSH<\/title>/);
+  // Head injections land after <head>, body injections after <body>.
+  assert.ok(html.indexOf('<head>') < html.indexOf('<script src'));
+  assert.ok(html.indexOf('</head>') > html.indexOf('<script src'));
+  assert.ok(html.indexOf('<body>') < html.indexOf('<div id="root">'));
+});
+
+test('fallback renders index through renderIndex like dsh-host-frontend-static', async () => {
+  const rows = [];
+  const ctx = {
+    emit(event, table) {
+      assert.equal(event, 'webserver/index-inject');
+      table.push(...rows);
+    }
+  };
+  const server = createElectronWebServer(ctx);
+  server.tapIndex((html) => html.replace('__APP__', 'dsh-desktop'));
+  rows.push({
+    kind: 'script-src',
+    placement: 'head',
+    src: '/plugins/app.js'
+  });
+  server.registerFallback(async (req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(
+      server.renderIndex('<html><head></head><body>__APP__</body></html>')
+    );
+  });
+
+  const root = await server.dispatch({
+    method: 'GET',
+    path: '/',
+    headers: {},
+    body: undefined
+  });
+  assert.equal(root.status, 200);
+  const html = root.body.toString('utf8');
+  assert.match(html, /<script src="\/plugins\/app\.js"><\/script>/);
+  assert.match(html, /<body>dsh-desktop<\/body>/);
+});
+
+test('renderIndex works without a context (no injection subscribers)', () => {
+  const server = createElectronWebServer();
+  const html = server.renderIndex('<html><head></head><body>hi</body></html>');
+  assert.equal(html, '<html><head></head><body>hi</body></html>');
+});
+
+test('collectIndexInjections emits one fresh table per call', () => {
+  const seen = [];
+  const ctx = {
+    emit(event, table) {
+      seen.push(table);
+    }
+  };
+  const server = createElectronWebServer(ctx);
+  assert.deepEqual(server.collectIndexInjections(), []);
+  assert.deepEqual(server.collectIndexInjections(), []);
+  assert.equal(seen.length, 2);
+  assert.notEqual(seen[0], seen[1]);
+});
+
 test('duplicate route registration throws', () => {
   const server = createElectronWebServer();
   const route = {
