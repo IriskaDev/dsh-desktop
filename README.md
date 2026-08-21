@@ -15,7 +15,7 @@ Unlike `dsh web`, which starts a local HTTP server and requires you to open a br
 - **One command, ready to use**: `dsh --profile desktop` opens the desktop window automatically — no need to visit the browser.
 - **No local HTTP server**: no `node:http` and no TCP listening port; static assets, APIs, and event streams all travel over Electron IPC / custom protocol.
 - **Full DSH Web reuse**: the frontend UI, session/workspace persistence, agent, and tools are all provided by DSH's existing Cordis services.
-- **Frameless native window**: the native title bar is removed; a preload script injects a top drag strip and a custom close button in the top-right corner.
+- **DSH-styled title bar**: the OS title bar is hidden, but a preload script injects a visible title bar styled with DSH's theme tokens, while the native minimize/maximize/close controls stay as a color-matched overlay.
 - **Bidirectional shutdown cleanup**:
   - Closing the Electron window makes DSH dispose itself (shutting down the agent and related services), leaving no orphan processes;
   - If the DSH parent process exits, Electron detects it every 2 seconds and quits, leaving no orphan windows.
@@ -39,7 +39,7 @@ Electron creates a frameless BrowserWindow and loads dsh-desktop://127.0.0.1/
 preload.cjs bridges fetch/WebSocket → ipcRenderer → main process → fd-3 → DSH services
         │
         ▼
-preload.cjs injects the top drag strip + custom close button
+preload.cjs injects the DSH-styled title bar and bridges fetch/WebSocket to IPC
 ```
 
 ## Requirements

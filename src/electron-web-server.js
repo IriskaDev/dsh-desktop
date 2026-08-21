@@ -6,10 +6,100 @@ import { Buffer } from 'node:buffer';
  * `dsh-web-app` / `dsh-host-frontend-static` / `dsh-client-connection` to run
  * unchanged: routes and the SPA fallback are registered exactly as they would
  * be against the real HTTP server, while requests arrive through Electron IPC
- * (see `dispatch`) instead of a TCP socket.
+ * (see `dispatch`) instead of a TCP socket. Index responses go through the
+ * same structured-injection pipeline (`renderIndex`) as the real server.
+ *
+ * @param ctx - optional Cordis context; when present, `collectIndexInjections`
+ * emits the `webserver/index-inject` event so subscribers (boot manifest,
+ * theme, ...) can push their rows, exactly like the real webserver does.
  */
 
-export function createElectronWebServer() {
+/** Escape a row value before placing it in a quoted HTML attribute. */
+function escapeHtmlAttribute(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function assertNever(row) {
+  throw new Error(
+    `webserver: unknown index injection row ${JSON.stringify(row)}`
+  );
+}
+
+/** Render one structured index-injection row to markup with its placement. */
+function renderRow(row) {
+  switch (row.kind) {
+    case 'global':
+      return {
+        placement: 'head',
+        markup: `<script>globalThis[${JSON.stringify(row.name).replaceAll('<', '\\u003c')}] = ${row.value === undefined ? 'undefined' : JSON.stringify(row.value).replaceAll('<', '\\u003c')}</script>`
+      };
+    case 'script':
+      return {
+        placement: row.placement,
+        markup: `<script>${row.text}</script>`
+      };
+    case 'script-src':
+      return {
+        placement: row.placement,
+        markup: `<script src="${escapeHtmlAttribute(row.src)}"></script>`
+      };
+    case 'style':
+      return {
+        placement: 'head',
+        markup: `<style>${row.text}</style>`
+      };
+    case 'html':
+      return {
+        placement: row.placement,
+        markup: row.html
+      };
+    default:
+      return assertNever(row);
+  }
+}
+
+/** Insert `markup` into `html` at `at`. */
+function splice(html, at, markup) {
+  return `${html.slice(0, at)}${markup}${html.slice(at)}`;
+}
+
+/**
+ * Render structured index-injection rows into an index.html body: head rows
+ * immediately after the opening head tag, body rows immediately after the
+ * opening body tag, each group in table order. Mirrors
+ * `renderIndexInjections` from `@deepseek-ai/dsh-host-webserver`.
+ */
+export function renderIndexInjections(html, rows) {
+  let head = '';
+  let body = '';
+  for (const row of rows) {
+    const rendered = renderRow(row);
+    if (rendered.placement === 'head') head += rendered.markup;
+    else body += rendered.markup;
+  }
+  let out = html;
+  if (head !== '') {
+    const open = /<head(?:\s[^>]*)?>/i.exec(out);
+    out =
+      open === null
+        ? `${head}${out}`
+        : splice(out, open.index + open[0].length, head);
+  }
+  if (body !== '') {
+    const open = /<body(?:\s[^>]*)?>/i.exec(out);
+    out =
+      open === null
+        ? `${out}${body}`
+        : splice(out, open.index + open[0].length, body);
+  }
+  return out;
+}
+
+export function createElectronWebServer(ctx) {
   const exact = new Map();
   const prefixes = new Map();
   const upgrades = new Map();
@@ -118,6 +208,37 @@ export function createElectronWebServer() {
     return res.toResult();
   }
 
+  /**
+   * Run an index.html body through the registered taps in registration order
+   * — called by the fallback owner on every index response it renders.
+   */
+  function applyIndexTaps(html) {
+    let out = html;
+    for (const transform of indexTaps) out = transform(out);
+    return out;
+  }
+
+  /**
+   * Gather the structured injection table: one `webserver/index-inject` emit,
+   * every subscriber pushes its current rows. Fresh per call, so subscribers
+   * read live state (module graph, theme preference) at emit time.
+   */
+  function collectIndexInjections() {
+    const table = [];
+    if (ctx?.emit) ctx.emit('webserver/index-inject', table);
+    return table;
+  }
+
+  /**
+   * Render one index.html body: the structured injection table first, then
+   * the raw `tapIndex` transforms over the result.
+   */
+  function renderIndex(html) {
+    return applyIndexTaps(
+      renderIndexInjections(html, collectIndexInjections())
+    );
+  }
+
   return {
     get port() {
       return 0;
@@ -162,11 +283,9 @@ export function createElectronWebServer() {
         if (at !== -1) indexTaps.splice(at, 1);
       };
     },
-    applyIndexTaps(html) {
-      let out = html;
-      for (const transform of indexTaps) out = transform(out);
-      return out;
-    },
+    applyIndexTaps,
+    collectIndexInjections,
+    renderIndex,
     dispatch
   };
 }

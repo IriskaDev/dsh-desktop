@@ -15,7 +15,7 @@
 - **一条命令开箱即用**：`dsh --profile desktop` 启动后自动打开桌面窗口，无需手动访问浏览器。
 - **无本地 HTTP 服务**：不启动 `node:http`、不监听任何 TCP 端口；静态资源、API 与事件流全部走 Electron IPC/自定义协议。
 - **完全复用 DSH Web**：前端 UI、会话/工作区持久化、agent、工具全部由 DSH 原有 Cordis 服务提供。
-- **无边框原生窗口**：去掉原生标题栏，由 preload 注入顶部拖拽条和右上角自定义关闭按钮。
+- **DSH 风格标题栏**：隐藏系统原生标题栏，由 preload 注入一条按 DSH 主题 token 着色的可见标题栏，原生最小化/最大化/关闭按钮以同色 overlay 保留。
 - **双向退出清理**：
   - 关闭 Electron 窗口 → DSH 侧自动 dispose（关闭 agent 与相关服务），不遗留孤儿进程；
   - DSH 父进程退出 → Electron 每 2 秒探测一次父进程，自动退出，不遗留孤儿窗口。
@@ -39,7 +39,7 @@ Electron 创建无边框 BrowserWindow，加载 dsh-desktop://127.0.0.1/
 preload.cjs 覆盖 fetch/WebSocket → ipcRenderer → 主进程 → fd-3 → DSH 服务
         │
         ▼
-preload.cjs 注入顶部拖拽条 + 自定义关闭按钮
+preload.cjs 注入 DSH 风格标题栏，并把 fetch/WebSocket 桥接到 IPC
 ```
 
 ## 环境要求

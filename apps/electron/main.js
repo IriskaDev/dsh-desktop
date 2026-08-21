@@ -11,6 +11,42 @@ const preload = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 const APP_PROTOCOL = 'dsh-desktop';
 const APP_ORIGIN = `${APP_PROTOCOL}://127.0.0.1`;
 
+// Title bar geometry/colors shared by the native window-controls overlay and
+// the preload-injected DSH-styled title bar. The dark values match DSH's own
+// theme tokens (`--dsw-static-neutral-bluish-950` / `-50`).
+const TITLEBAR_HEIGHT = 36;
+const TITLEBAR_BG = '#151517';
+const TITLEBAR_FG = '#f9fafb';
+
+function windowOptions() {
+  const options = {
+    width: 1280,
+    height: 860,
+    title: 'DeepSeek Harness',
+    backgroundColor: TITLEBAR_BG,
+    webPreferences: {
+      preload,
+      contextIsolation: false,
+      nodeIntegration: false
+    }
+  };
+  if (process.platform === 'darwin') {
+    // Keep the native traffic lights; the title bar itself is drawn by the
+    // preload with DSH theme variables.
+    options.titleBarStyle = 'hiddenInset';
+  } else {
+    // Windows/Linux: hide the OS title bar but keep the native min/max/close
+    // controls as an overlay, colored to match the DSH dark theme.
+    options.titleBarStyle = 'hidden';
+    options.titleBarOverlay = {
+      color: TITLEBAR_BG,
+      symbolColor: TITLEBAR_FG,
+      height: TITLEBAR_HEIGHT
+    };
+  }
+  return options;
+}
+
 // Must run before app.whenReady(); marks the custom scheme as a standard,
 // secure origin so relative URLs, fetch, and subresource loading behave like
 // they do under http(s).
@@ -218,10 +254,6 @@ function setupOfflineIpc(win) {
 }
 
 // ---- window management ----------------------------------------------------
-ipcMain.on('dsh-desktop:close', (event) => {
-  BrowserWindow.fromWebContents(event.sender)?.close();
-});
-
 app.whenReady().then(() => {
   let win;
   if (offline) {
@@ -260,17 +292,7 @@ app.whenReady().then(() => {
       if (socket.readyState !== 'open') return;
       windowCreated = true;
 
-      win = new BrowserWindow({
-        width: 1280,
-        height: 860,
-        title: 'dsh-desktop',
-        frame: false,
-        webPreferences: {
-          preload,
-          contextIsolation: false,
-          nodeIntegration: false
-        }
-      });
+      win = new BrowserWindow(windowOptions());
       setupOfflineIpc(win);
       win.webContents.on('did-fail-load', (event, code, desc, failedUrl) => {
         console.error(
@@ -290,17 +312,7 @@ app.whenReady().then(() => {
       if (!windowCreated) app.quit();
     });
   } else {
-    win = new BrowserWindow({
-      width: 1280,
-      height: 860,
-      title: 'dsh-desktop',
-      frame: false,
-      webPreferences: {
-        preload,
-        contextIsolation: false,
-        nodeIntegration: false
-      }
-    });
+    win = new BrowserWindow(windowOptions());
     win.loadURL(url).catch((err) => {
       console.error(
         `[dsh-desktop] failed to load ${url}: ${err?.message ?? err}`
