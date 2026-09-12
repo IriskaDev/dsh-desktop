@@ -71,10 +71,10 @@ dsh --profile dsh-desktop --from-default-profile web --dump-config
 
 ```bash
 # Windows
-dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop-0.3.1-win32-x64
+dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop-0.4.0-win32-x64
 
 # macOS / Linux
-dsh plugin --profile dsh-desktop add "link:/path/to/dsh-desktop-0.3.1-linux-x64"
+dsh plugin --profile dsh-desktop add "link:/path/to/dsh-desktop-0.4.0-linux-x64"
 ```
 
 Release 包已内置对应平台的 Electron 运行时（`dist/electron/runtime/`），插件会优先使用它，因此**不需要执行 `npm install`**。
