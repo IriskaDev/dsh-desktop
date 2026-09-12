@@ -2,7 +2,7 @@
 <!-- TASK_TYPE: bugfix -->
 <!-- STATUS: DONE -->
 <!-- CREATED: 2026-09-10 -->
-<!-- LAST_UPDATED: 2026-09-12 08:40 -->
+<!-- LAST_UPDATED: 2026-09-12 08:45 -->
 <!-- OWNER: IriskaDev -->
 <!-- BRANCH: bugfix/dsh-012-desktop-hang -->
 <!-- SEVERITY: P1 -->
@@ -166,6 +166,7 @@
 - `2026-09-10 03:56` 核实本地安装：`C:\Users\IriskaDev\.dsh\plugins\dsh-mode-boost\package.json` 仍为 `0.1.0`，`lib/index.js` 88/133/170 行与 `lib/core.js` 191 行仍直接读 `session.events`，没有 `snapshotEvents()` 兼容分支。
 - `2026-09-12 08:40` 用户指示按流程提交、推送并发版；第三方 `dsh-mode-boost` 问题不计入本仓库发布阻塞。同步更新 `workflows/06-release-process.md` 与 `workflows/13-ci-cd-pipeline.md`，记录实际 tag 触发三平台打包并创建 GitHub Release 的流程；准备归档任务并执行 `0.3.1` patch 发布。
 - `2026-09-12 08:41` 已完成发布前文档与台账更新：`desktop-surface.md` / `modules/index.md` 刷新至 2026-09-12，`06` / `13` 流程文档同步实际 tag 发布流程；任务状态置为 DONE 并归档到 `_archive/2026-09/`，即将执行提交、PR 与 `v0.3.1` 发布。
+- `2026-09-12 08:45` PR #12 (`fix(desktop): migrate to DSH 0.1.2 remote event streams`) CI 通过并 squash 合并到 `main`，合并提交 `5f9f18b`；开始创建 `0.3.1` 版本提交与 `v0.3.1` tag 发布。
 <!-- CONTENT_END: log -->
 
 ---
