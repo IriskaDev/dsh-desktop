@@ -27,7 +27,7 @@
 | 日志框架 | 无（直接用 `process.stdout.write` 输出 JSONL） |
 | 日志级别配置 | 无 |
 | 日志文件位置 | 无（stdout，未落盘） |
-| 日志查看命令 | 直接观察 stdout：`"..." | dsh --profile desktop` |
+| 日志查看命令 | 直接观察 stdout：`"..." | dsh --profile dsh-desktop` |
 <!-- CONTENT_END: logging -->
 
 ---
@@ -44,7 +44,7 @@
 **常用排查命令**：
 ```bash
 # 观察 JSONL 事件流
-"帮我看看当前目录" | dsh --profile desktop
+"帮我看看当前目录" | dsh --profile dsh-desktop
 # 语法校验
 node --check src/index.js
 ```

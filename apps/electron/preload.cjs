@@ -154,25 +154,33 @@ function installWebSocketBridge() {
       if (streamId === undefined || payload.frame == null) return;
       const frame = payload.frame;
       if (frame.kind === 'item') {
-        this._dispatch('message', {
-          type: 'message',
-          data: JSON.stringify({
-            type: 'item',
-            streamId,
-            value: frame.value
-          })
+        this._sendFrame({
+          type: 'item',
+          streamId,
+          value: frame.value
         });
         return;
       }
       if (frame.kind === 'error') {
-        this._dispatch('error', {
+        this._sendFrame({
           type: 'error',
-          message: frame.error?.message
+          streamId,
+          error: frame.error
         });
-        this._finish();
+        this._unsubscribe(streamId);
         return;
       }
-      if (frame.kind === 'end') this._finish();
+      if (frame.kind === 'end') {
+        this._sendFrame({ type: 'end', streamId });
+        this._unsubscribe(streamId);
+      }
+    }
+
+    _sendFrame(frame) {
+      this._dispatch('message', {
+        type: 'message',
+        data: JSON.stringify(frame)
+      });
     }
 
     _subscribe(streamId, message) {

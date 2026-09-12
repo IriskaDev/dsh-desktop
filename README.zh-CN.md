@@ -6,13 +6,13 @@
 
 ## 简介
 
-`dsh-desktop` 是一个 DSH bundle patch 插件（`cordis.patch.yml`），为 DSH 提供一个名为 `desktop` 的 surface。以 `desktop` profile 启动 DSH 后，插件会禁掉 DSH 的 `node:http` webServer，提供一个不监听端口的 `webServer` 兼容服务，并拉起 Electron 原生窗口加载 DSH Web 界面。
+`dsh-desktop` 是一个 DSH bundle patch 插件（`cordis.patch.yml`），为 DSH 提供一个桌面 surface。DSH 0.1.5 起 `desktop` profile 名称被官方 Electron 应用保留，CLI 会拒绝启动或管理它；因此本项目使用非保留名称 `dsh-desktop` profile。启动后，插件会禁掉 DSH 的 `node:http` webServer，提供一个不监听端口的 `webServer` 兼容服务，并拉起 Electron 原生窗口加载 DSH Web 界面。
 
-与 `dsh web` 的区别：`dsh web` 启动一个本地 HTTP 服务，需要用户手动打开浏览器；`dsh --profile desktop` 则完全复用 DSH Web 前端与 Cordis 服务，但**不监听任何 TCP 端口**——Electron 通过自定义协议 `dsh-desktop://` 加载前端，`fetch` 与事件流经 IPC 桥接到宿主进程。
+与 `dsh web` 的区别：`dsh web` 启动一个本地 HTTP 服务，需要用户手动打开浏览器；`dsh --profile dsh-desktop` 则完全复用 DSH Web 前端与 Cordis 服务，但**不监听任何 TCP 端口**——Electron 通过自定义协议 `dsh-desktop://` 加载前端，`fetch` 与事件流经 IPC 桥接到宿主进程。
 
 ## 特性
 
-- **一条命令开箱即用**：`dsh --profile desktop` 启动后自动打开桌面窗口，无需手动访问浏览器。
+- **一条命令开箱即用**：`dsh --profile dsh-desktop` 启动后自动打开桌面窗口，无需手动访问浏览器。
 - **无本地 HTTP 服务**：不启动 `node:http`、不监听任何 TCP 端口；静态资源、API 与事件流全部走 Electron IPC/自定义协议。
 - **完全复用 DSH Web**：前端 UI、会话/工作区持久化、agent、工具全部由 DSH 原有 Cordis 服务提供。
 - **DSH 风格标题栏**：隐藏系统原生标题栏，由 preload 注入一条按 DSH 主题 token 着色的可见标题栏，原生最小化/最大化/关闭按钮以同色 overlay 保留。
@@ -23,7 +23,7 @@
 ## 工作原理
 
 ```text
-dsh --profile desktop
+dsh --profile dsh-desktop
         │
         ▼
 DSH boot（web-app bundle + desktop patch）
@@ -48,7 +48,7 @@ Electron 主进程完成 DSH 0.1.2 的 token/cookie 交换，并把签名 cookie
 
 - Node.js 24+（仓库为纯 ESM，`"type": "module"`）
 - npm（用于安装依赖与运行开发脚本）
-- DSH CLI（`dsh`，0.1.2-rc.1 或更高，需支持 Remote API）
+- DSH CLI（`dsh`，0.1.2-rc.1 或更高，需支持 Remote API；DSH 0.1.5+ 请使用 `dsh-desktop` profile）
 - 运行真实会话前，需在 DSH 中配置模型凭据（如 `DEEPSEEK_API_KEY`）
 
 ## 安装
@@ -60,14 +60,21 @@ Electron 主进程完成 DSH 0.1.2 的 token/cookie 交换，并把签名 cookie
    `dsh-desktop-0.1.0-linux-x64.tar.gz`（Linux）或
    `dsh-desktop-0.1.0-darwin-*`（macOS）。
 2. 解压到任意目录。
-3. 将解压目录链接到 DSH 的 desktop profile：
+3. 将解压目录链接到 DSH 的 `dsh-desktop` profile。若 profile 尚不存在，先执行一次初始化：
+
+```bash
+# 仅首次需要；DSH ≥ 0.1.5
+dsh --profile dsh-desktop --from-default-profile web --dump-config
+```
+
+然后安装插件：
 
 ```bash
 # Windows
-dsh plugin --profile desktop add link:D:\path\to\dsh-desktop-0.1.0-win32-x64
+dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop-0.3.1-win32-x64
 
 # macOS / Linux
-dsh plugin --profile desktop add "link:/path/to/dsh-desktop-0.1.0-linux-x64"
+dsh plugin --profile dsh-desktop add "link:/path/to/dsh-desktop-0.3.1-linux-x64"
 ```
 
 Release 包已内置对应平台的 Electron 运行时（`dist/electron/runtime/`），插件会优先使用它，因此**不需要执行 `npm install`**。
@@ -82,12 +89,15 @@ cd dsh-desktop
 # 2. 安装开发依赖（包含 Electron；本包没有 dependencies）
 npm install
 
-# 3. 将本插件链接到 DSH 的 desktop profile
+# 3. 将本插件链接到 DSH 的 dsh-desktop profile
+# 若 profile 尚不存在，先执行：
+dsh --profile dsh-desktop --from-default-profile web --dump-config
+
 # Windows
-dsh plugin --profile desktop add link:D:\path\to\dsh-desktop
+dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop
 
 # macOS / Linux
-dsh plugin --profile desktop add "link:$(pwd)"
+dsh plugin --profile dsh-desktop add "link:$(pwd)"
 ```
 
 说明：
@@ -99,7 +109,7 @@ dsh plugin --profile desktop add "link:$(pwd)"
 ## 使用
 
 ```bash
-dsh --profile desktop
+dsh --profile dsh-desktop
 ```
 
 启动后 Electron 窗口会自动打开并加载 DSH Web 界面，直接在窗口中对话即可。
@@ -107,7 +117,7 @@ dsh --profile desktop
 如需查看透传给 Web 应用的参数：
 
 ```bash
-dsh --profile desktop --help
+dsh --profile dsh-desktop --help
 ```
 
 ## 开发
