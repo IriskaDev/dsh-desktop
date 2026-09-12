@@ -29,6 +29,10 @@ function assertNever(row) {
   );
 }
 
+/** Tail script settling the boot-readiness deferred (`__DSH_BOOT_READY__`). */
+const READY_MARKUP =
+  '<script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>';
+
 /** Render one structured index-injection row to markup with its placement. */
 function renderRow(row) {
   switch (row.kind) {
@@ -46,6 +50,11 @@ function renderRow(row) {
       return {
         placement: row.placement,
         markup: `<script src="${escapeHtmlAttribute(row.src)}"></script>`
+      };
+    case 'script-preload':
+      return {
+        placement: 'head',
+        markup: `<link rel="preload" as="script" href="${escapeHtmlAttribute(row.src)}">`
       };
     case 'style':
       return {
@@ -81,6 +90,7 @@ export function renderIndexInjections(html, rows) {
     if (rendered.placement === 'head') head += rendered.markup;
     else body += rendered.markup;
   }
+  body += READY_MARKUP;
   let out = html;
   if (head !== '') {
     const open = /<head(?:\s[^>]*)?>/i.exec(out);

@@ -88,14 +88,24 @@ test('parent channel forwards event frames to subscribers', async () => {
   let sendFrame;
   createParentIpcChannel(socket, {
     request: async () => ({ status: 200, headers: {}, body: Buffer.alloc(0) }),
-    subscribe: (stream, onFrame) => {
+    subscribe: (stream, onFrame, done, payload) => {
       assert.equal(stream, 'mux');
+      assert.deepEqual(payload, { endpoint: '$events', args: {} });
       sendFrame = onFrame;
+      assert.equal(typeof done, 'function');
       return () => {};
     }
   });
 
-  socket.emit('data', encodeFrame({ type: 'subscribe', id: 9, stream: 'mux' }));
+  socket.emit(
+    'data',
+    encodeFrame({
+      type: 'subscribe',
+      id: 9,
+      stream: 'mux',
+      payload: { endpoint: '$events', args: {} }
+    })
+  );
   sendFrame({ rpcId: 'rpc-1', payload: { type: 'text-delta' } });
 
   const frame = decodeFrame(socket.written[0]);

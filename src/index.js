@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { createElectronWebServer } from './electron-web-server.js';
 import { createParentIpcChannel, sendFrame } from './ipc-channel.js';
+import { createRemoteStreamFactory } from './remote-stream.js';
 
 export const name = 'desktop';
 
+const DESKTOP_ORIGIN = 'dsh-desktop://127.0.0.1';
 const require = createRequire(import.meta.url);
 const ELECTRON_MAIN = fileURLToPath(
   new URL('../apps/electron/main.js', import.meta.url)
@@ -53,6 +55,28 @@ function resolveElectron() {
 }
 
 /**
+ * Resolve the authenticated root URL for the desktop window. DSH 0.1.2
+ * requires the process launch token on the first root request; Connection
+ * exchanges it for a host-bound cookie before serving the frontend.
+ */
+export function resolveDesktopUrl(ctx) {
+  const baseUrl = `${DESKTOP_ORIGIN}/`;
+  const connection = ctx.get?.('connection');
+  if (typeof connection?.authenticatedUrl === 'function') {
+    try {
+      const authenticated = connection.authenticatedUrl(baseUrl);
+      if (typeof authenticated === 'string' && authenticated.length > 0) {
+        return authenticated;
+      }
+    } catch {
+      // Fall back to the unauthenticated root; the browser will surface any
+      // 401 instead of hanging with a missing ready frame.
+    }
+  }
+  return baseUrl;
+}
+
+/**
  * The desktop surface: a native Electron window loading the DSH web UI with no
  * HTTP server. This plugin provides a `webServer`-shaped service that never
  * listens; `dsh-web-app` and `dsh-client-connection` register their routes
@@ -63,20 +87,9 @@ export function apply(ctx) {
   const webServer = createElectronWebServer(ctx);
   ctx.provide('webServer', webServer);
 
-  // The /api event downlinks (`mux` and `host`) are exposed by apiProxy as
-  // async iterables. Register them as soon as apiProxy is available.
-  const streams = new Map();
-  const apiReady = new Promise((resolve, reject) => {
-    try {
-      ctx.inject(['apiProxy'], (apiCtx) => {
-        streams.set('mux', apiCtx.apiProxy.events.mux);
-        streams.set('host', apiCtx.apiProxy.events.host);
-        resolve();
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
+  // DSH 0.1.2 removed ApiProxy. The desktop surface forwards Remote streams
+  // (including the application `$events` stream) through the Typert Gateway.
+  const remoteStreams = createRemoteStreamFactory(ctx);
 
   const channels = new Set();
   const sockets = new Set();
@@ -84,11 +97,15 @@ export function apply(ctx) {
   let ipcServer;
   let ready = false;
   let readyFailed = false;
+  let desktopUrl = resolveDesktopUrl(ctx);
 
-  const sendReady = (socket) => {
+  const sendReady = (socket, url) => {
     if (!ready || socket.destroyed) return;
     try {
-      sendFrame(socket, { type: 'ready' });
+      sendFrame(socket, {
+        type: 'ready',
+        ...(url === undefined ? {} : { url })
+      });
     } catch {
       // The socket may have closed between the destroyed check and the write.
     }
@@ -132,25 +149,46 @@ export function apply(ctx) {
             body
           });
         },
-        subscribe: (streamName, send, done) => {
-          const open = streams.get(streamName);
-          if (open === undefined) {
+        subscribe: (streamName, send, done, payload) => {
+          if (streamName !== 'remote-mux') {
             done();
             return () => {};
           }
           const abort = new AbortController();
-          const frames = open(
-            { rpcId: randomUUID(), payload: {} },
-            abort.signal
-          );
+          const endpoint = payload?.endpoint;
+          if (typeof endpoint !== 'string' || endpoint.length === 0) {
+            send({
+              kind: 'error',
+              error: { message: 'remote-mux: stream endpoint is required' }
+            });
+            done();
+            return () => {};
+          }
           const pump = (async () => {
             try {
-              for await (const frame of frames) {
-                if (abort.signal.aborted) break;
-                send(frame);
+              const frames = await remoteStreams.open(
+                endpoint,
+                payload?.payload ?? { args: {} },
+                abort.signal
+              );
+              try {
+                for await (const frame of frames) {
+                  if (abort.signal.aborted) break;
+                  send({ kind: 'item', value: frame });
+                }
+              } finally {
+                if (!abort.signal.aborted) send({ kind: 'end' });
               }
-            } catch {
-              // Stream closed; fall through.
+            } catch (error) {
+              if (!abort.signal.aborted) {
+                send({
+                  kind: 'error',
+                  error: {
+                    message:
+                      error instanceof Error ? error.message : String(error)
+                  }
+                });
+              }
             } finally {
               done();
             }
@@ -168,7 +206,7 @@ export function apply(ctx) {
       });
       // If the parent finished booting before this socket connected, the
       // shell would otherwise wait forever; deliver the ready frame now.
-      sendReady(socket);
+      sendReady(socket, desktopUrl);
     });
 
     ipcServer.on('error', (err) => {
@@ -197,7 +235,7 @@ export function apply(ctx) {
       child.on('exit', () => {
         for (const channel of channels) channel.close();
         ipcServer.close();
-        // A loader/apiProxy boot failure already owns the DSH error path;
+        // A loader/gateway boot failure already owns the DSH error path;
         // exiting here would mask it with a clean 0 exit.
         if (readyFailed) return;
         const timer = setTimeout(() => process.exit(0), 2000);
@@ -215,13 +253,14 @@ export function apply(ctx) {
   launch();
 
   // Send `ready` once the loader has settled (webServer routes registered)
-  // and the apiProxy event streams are available.
+  // and the Typert Remote gateway is available.
   const settled = Promise.resolve().then(() => ctx.get('loader')?.await?.());
-  void Promise.all([settled, apiReady]).then(
+  void Promise.all([settled, remoteStreams.ready]).then(
     () => {
       if (ctx.get('webServer') === undefined) return;
+      desktopUrl = resolveDesktopUrl(ctx);
       ready = true;
-      for (const socket of [...sockets]) sendReady(socket);
+      for (const socket of [...sockets]) sendReady(socket, desktopUrl);
     },
     () => {
       readyFailed = true;

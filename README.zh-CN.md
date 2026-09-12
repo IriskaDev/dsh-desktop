@@ -36,17 +36,19 @@ src/index.js apply(ctx)
 Electron 创建无边框 BrowserWindow，加载 dsh-desktop://127.0.0.1/
         │  主进程 protocol.handle 把静态资源/API 请求经 fd-3 转发给 DSH
         ▼
-preload.cjs 覆盖 fetch/WebSocket → ipcRenderer → 主进程 → fd-3 → DSH 服务
+preload.cjs 覆盖 fetch 与 /api/remote.mux → ipcRenderer → 主进程 → fd-3 → DSH 服务
         │
         ▼
-preload.cjs 注入 DSH 风格标题栏，并把 fetch/WebSocket 桥接到 IPC
+preload.cjs 注入 DSH 风格标题栏，并把 fetch 与 /api/remote.mux 桥接到 IPC
 ```
+
+Electron 主进程完成 DSH 0.1.2 的 token/cookie 交换，并把签名 cookie 注入所有桥接请求；桌面形态仍然不会打开任何 TCP 监听端口。
 
 ## 环境要求
 
 - Node.js 24+（仓库为纯 ESM，`"type": "module"`）
 - npm（用于安装依赖与运行开发脚本）
-- DSH CLI（`dsh`，建议 rc.6 或更高）
+- DSH CLI（`dsh`，0.1.2-rc.1 或更高，需支持 Remote API）
 - 运行真实会话前，需在 DSH 中配置模型凭据（如 `DEEPSEEK_API_KEY`）
 
 ## 安装
@@ -92,7 +94,7 @@ dsh plugin --profile desktop add "link:$(pwd)"
 
 - `dsh plugin add` 会把剩余参数转发给 profile 目录下的 pnpm 执行，因此支持 pnpm 的 `link:` 协议。
 - 开发态插件会从本仓库的 `node_modules` 解析 `electron`（因此第 2 步的 `npm install` 必须执行）；若检测不到，会回退到 `dist/electron/runtime/` 中打包好的 Electron 运行时。
-- 除 Electron 外，DSH 宿主模块（web 前端、`dsh-web-app`、`dsh-client-connection`、`dsh-host-apiproxy` 等）由 DSH 运行时解析，本包无需声明运行时依赖。
+- 除 Electron 外，DSH 宿主模块（web 前端、`dsh-web-app`、`dsh-client-connection`、`dsh-api-gateway`、`dsh-api-remotes` 等）由 DSH 运行时解析，本包无需声明运行时依赖。
 
 ## 使用
 
@@ -138,7 +140,7 @@ dsh-desktop/
 │   └── startup.js             # session 身份辅助模块（当前 patch 未引用）
 ├── apps/electron/
 │   ├── main.js                # Electron 主进程：dsh-desktop:// 协议、fd-3 RPC、无边框窗口
-│   ├── preload.cjs            # preload：fetch/WebSocket 桥 + 顶部拖拽条 + 自定义关闭按钮
+│   ├── preload.cjs            # preload：fetch + /api/remote.mux 桥 + DSH 风格标题栏
 │   └── package.json           # Electron 应用元数据
 ├── test/
 │   ├── index.test.js

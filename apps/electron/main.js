@@ -146,7 +146,7 @@ class ParentRpc {
     this.eventHandlers = new Map();
     createFrameStream(socket, (message) => {
       if (message.type === 'ready') {
-        onReady();
+        onReady(message);
         return;
       }
       if (message.type === 'response') {
@@ -171,10 +171,15 @@ class ParentRpc {
     });
   }
 
-  subscribe(stream, onFrame) {
+  subscribe(stream, onFrame, payload) {
     const id = this.nextId++;
     this.eventHandlers.set(id, onFrame);
-    sendFrame(this.socket, { type: 'subscribe', id, stream });
+    sendFrame(this.socket, {
+      type: 'subscribe',
+      id,
+      stream,
+      ...(payload === undefined ? {} : { payload })
+    });
     return () => {
       this.eventHandlers.delete(id);
       sendFrame(this.socket, { type: 'unsubscribe', id });
@@ -183,6 +188,13 @@ class ParentRpc {
 }
 
 let parentRpc;
+let authCookie;
+
+function headersWithAuthCookie(headers) {
+  const next = { ...(headers ?? {}) };
+  if (authCookie !== undefined) next.cookie = authCookie;
+  return next;
+}
 
 function offlineRequest(payload) {
   return parentRpc.request(payload);
@@ -218,7 +230,7 @@ function setupOfflineIpc(win) {
     const request = await requestFromPayload({
       method: payload.init?.method ?? 'GET',
       url: payload.url,
-      headers: payload.init?.headers ?? {},
+      headers: headersWithAuthCookie(payload.init?.headers ?? {}),
       body: payload.init?.body
     });
     const body = await request.arrayBuffer();
@@ -231,15 +243,19 @@ function setupOfflineIpc(win) {
 
   ipcMain.on('dsh:subscribe', (event, payload) => {
     const key = `${event.sender.id}:${payload.stream}:${payload.id}`;
-    const disposer = parentRpc.subscribe(payload.stream, (frame) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('dsh:event', {
-          id: payload.id,
-          stream: payload.stream,
-          frame
-        });
-      }
-    });
+    const disposer = parentRpc.subscribe(
+      payload.stream,
+      (frame) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('dsh:event', {
+            id: payload.id,
+            stream: payload.stream,
+            frame
+          });
+        }
+      },
+      payload.payload
+    );
     subscriptions.set(key, disposer);
   });
 
@@ -271,20 +287,40 @@ app.whenReady().then(() => {
 
     let parentReady = false;
     let windowCreated = false;
+    let desktopUrl = `${APP_ORIGIN}/`;
 
-    parentRpc = new ParentRpc(socket, () => {
+    parentRpc = new ParentRpc(socket, (message) => {
       parentReady = true;
+      if (typeof message?.url === 'string' && message.url.length > 0) {
+        desktopUrl = message.url;
+      }
       maybeCreateWindow();
     });
 
     protocol.handle(APP_PROTOCOL, async (request) => {
       const body = await request.arrayBuffer();
-      return requestFromPayload({
+      const initial = await requestFromPayload({
         method: request.method,
         url: request.url,
-        headers: Object.fromEntries(request.headers.entries()),
+        headers: headersWithAuthCookie(
+          Object.fromEntries(request.headers.entries())
+        ),
         body: body.byteLength === 0 ? undefined : Buffer.from(body)
       });
+      if (initial.status === 303) {
+        const location = initial.headers.get('location');
+        const setCookie = initial.headers.get('set-cookie');
+        if (location !== null && setCookie !== null) {
+          authCookie = setCookie.split(';', 1)[0].trim();
+          return requestFromPayload({
+            method: request.method,
+            url: new URL(location, request.url).href,
+            headers: headersWithAuthCookie({ host: '127.0.0.1' }),
+            body: body.byteLength === 0 ? undefined : Buffer.from(body)
+          });
+        }
+      }
+      return initial;
     });
 
     const maybeCreateWindow = () => {
@@ -299,7 +335,7 @@ app.whenReady().then(() => {
           `[dsh-desktop] did-fail-load ${failedUrl}: ${code} ${desc}`
         );
       });
-      win.loadURL(`${APP_ORIGIN}/`).catch((err) => {
+      win.loadURL(desktopUrl).catch((err) => {
         console.error(`[dsh-desktop] loadURL failed: ${err?.message ?? err}`);
       });
     };

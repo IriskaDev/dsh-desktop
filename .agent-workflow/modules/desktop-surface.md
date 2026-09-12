@@ -2,7 +2,7 @@
 <!-- MODULE_GROUP: - -->
 <!-- INVOLVED_CHAINS: - -->
 <!-- STATUS: DONE -->
-<!-- LAST_ANALYZED: 2026-08-17 -->
+<!-- LAST_ANALYZED: 2026-09-12 -->
 <!-- ANALYZER_VERSION: 1.6 -->
 
 # desktop surface（Electron 桌面外壳，无后台服务）
@@ -14,7 +14,7 @@
 ## 功能概述
 
 <!-- CONTENT_START: overview -->
-desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经本地 IPC（命名管道/Unix socket）RPC 转发给 DSH 侧 dispatch。事件流（mux/host）由 DSH 侧注入 `apiProxy` 获取，经同一 IPC 通道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口隐藏系统原生标题栏（`titleBarStyle: 'hidden'` / macOS `hiddenInset`），但保留原生最小化/最大化/关闭按钮（Windows/Linux 以 `titleBarOverlay` 同色 overlay 呈现）；preload 注入一条 36px 可见的 DSH 风格标题栏（使用 DSH 主题 CSS 变量），并把页面内容下移，不遮挡 DSH 头部。
+desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经本地 IPC（命名管道/Unix socket）RPC 转发给 DSH 侧 dispatch。Remote 事件流（`$events`）及其它 Remote 流由 DSH 侧通过 Typert Gateway 的 `typertGateway.wireStream.open` 获取，经同一 IPC 通道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口隐藏系统原生标题栏（`titleBarStyle: 'hidden'` / macOS `hiddenInset`），但保留原生最小化/最大化/关闭按钮（Windows/Linux 以 `titleBarOverlay` 同色 overlay 呈现）；preload 注入一条 36px 可见的 DSH 风格标题栏（使用 DSH 主题 CSS 变量），并把页面内容下移，不遮挡 DSH 头部。
 <!-- CONTENT_END: overview -->
 
 ---
@@ -33,7 +33,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 数据流向
 
 <!-- CONTENT_START: data_flow -->
-`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver，并关闭 web-runtime 的 openBrowser/printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 apiProxy 就绪后 DSH 侧发 `ready` 帧 → Electron 主进程才创建窗口并加载 `dsh-desktop://127.0.0.1/` → 主进程 `protocol.handle` 把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch`/`WebSocket` 桥接到 ipcRenderer，并注入 DSH 风格标题栏 → 渲染进程显示 DSH web 前端。
+`dsh --profile desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver，并关闭 web-runtime 的 openBrowser/printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 Typert Gateway 就绪后 DSH 侧发携带 `connection.authenticatedUrl()` 结果的 `ready` 帧 → Electron 主进程才创建窗口并加载该带 token 的 `dsh-desktop://127.0.0.1/` 根 URL → 主进程 `protocol.handle` 跟随 303 并缓存签名 cookie，再把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch` 并模拟 `/api/remote.mux` 的 open/item/error/end 桥接到 ipcRenderer，并注入 DSH 风格标题栏 → 渲染进程显示 DSH web 前端。
 <!-- CONTENT_END: data_flow -->
 
 ---
@@ -42,8 +42,9 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: core_interfaces -->
 - `name = 'desktop'` — 插件名
-- `apply(ctx)` — 提供 `webServer` 兼容服务、注册 `apiProxy` 事件源、spawn Electron
-- `createElectronWebServer(ctx)` — 不监听的 webServer 服务：`register` / `registerUpgrade` / `registerFallback` / `tapIndex` / `applyIndexTaps` / `collectIndexInjections` / `renderIndex` / `dispatch`；`renderIndex` 与真实 `dsh-host-webserver` 一致（先结构化注入行、后原始 tap），`collectIndexInjections` 经 `ctx.emit('webserver/index-inject')` 收集 boot manifest / theme 等注入行
+- `apply(ctx)` — 提供 `webServer` 兼容服务、注册 Typert Remote 流源、spawn Electron
+- `createRemoteStreamFactory(ctx)` — 等待 `typertGateway` 并打开 Remote 流（`wireStream.open`）
+- `createElectronWebServer(ctx)` — 不监听的 webServer 服务：`register` / `registerUpgrade` / `registerFallback` / `tapIndex` / `applyIndexTaps` / `collectIndexInjections` / `renderIndex` / `dispatch`；`renderIndex` 与真实 `dsh-host-webserver` 一致（支持 `script-preload`、结构化注入行、boot-ready tail、后原始 tap），`collectIndexInjections` 经 `ctx.emit('webserver/index-inject')` 收集 boot manifest / theme 等注入行
 - `createParentIpcChannel(socket, handlers)` — DSH 侧 IPC 帧协议与 RPC（4 字节 little-endian 长度 + UTF-8 JSON）
 - `sendFrame(socket, message)` — DSH 侧发送 IPC 帧，含 `{ type: 'ready' }` 就绪帧
 <!-- CONTENT_END: core_interfaces -->
@@ -53,7 +54,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 上游依赖（我依赖谁）
 
 <!-- CONTENT_START: upstream_dependencies -->
-- `apiProxy`（`@deepseek-ai/dsh-api-gateway`）：`events.mux` / `events.host` 事件源，经 `ctx.inject(['apiProxy'])` 获取
+- `typertGateway`（`@deepseek-ai/dsh-api-gateway`）：`wireStream.open('$events', { args: {} }, signal)` 打开 Host 侧 Remote 事件流，经 `ctx.inject(['typertGateway'])` 获取
+- `dsh-api-remotes`（DSH 宿主）：`API_REMOTE_FORWARDED_EVENTS` 决定 Remote 流允许转发的事件名单
 - `electron`（第三方，devDependency）：开发态 `require('electron')` 得到 electron 可执行文件路径用于 spawn；若解析失败则回退到 `dist/electron/runtime/` 打包好的 Electron 运行时（Release 包内置）
 - `dsh-web-app` / `dsh-client-connection` / `dsh-host-frontend-static`（DSH 宿主）：依赖本插件提供的 `webServer` 服务注册路由
 <!-- CONTENT_END: upstream_dependencies -->
@@ -84,6 +86,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `DSH_ELECTRON_IPC_PATH`（env）— DSH ↔ Electron 的命名管道/Unix socket 路径
 - `DSH_ELECTRON_PARENT_PID`（env）— 传给 Electron 的父进程 PID（用于自退出检测）
 - IPC 帧：4 字节 little-endian 长度 + UTF-8 JSON；新增 `{ type: 'ready' }` 帧用于通知 Electron 路由已就绪
+- remote-mux 订阅帧：`{ type: 'subscribe', id, stream: 'remote-mux', payload: { endpoint, payload } }`
+- DSH → Electron 流帧：`{ type: 'event', id, frame: { kind: 'item' | 'error' | 'end', ... } }`
 <!-- CONTENT_END: data_structures -->
 
 ---
@@ -93,8 +97,11 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 <!-- CONTENT_START: caution -->
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量，不走 argv。
 - **本地 IPC**：DSH 与 Electron 主进程经命名管道（Windows `\\.\pipe\...`）或 Unix socket 通信；Electron 侧用 `net.connect(DSH_ELECTRON_IPC_PATH)` 接入。父进程先退出时该通道自动关闭。
-- **启动并行化**：`apply` 阶段即 spawn Electron，让 Electron 冷启动与 DSH loader 结算重叠；DSH 侧在 loader 结算 + `apiProxy` 就绪后发送 `ready` 帧，Electron 收到后才创建窗口，避免路由未注册就发起首屏请求。
-- **事件流不走 WebSocket**：渲染进程的 `WebSocket` 被 preload 覆盖为 IPC 订阅，主进程经 fd-3 向 DSH 订阅 `apiProxy.events.mux/host`，帧经 `webContents.send` 推送。
+- **启动并行化**：`apply` 阶段即 spawn Electron，让 Electron 冷启动与 DSH loader 结算重叠；DSH 侧在 loader 结算 + Typert Gateway 就绪后发送 `ready` 帧，Electron 收到后才创建窗口，避免路由未注册就发起首屏请求。
+- **WebSocket 由 preload 模拟 Remote mux**：渲染进程的 `WebSocket('/api/remote.mux')` 被 preload 覆盖为 IPC 订阅，主进程经 fd-3 向 DSH 订阅 `remote-mux` 逻辑流，帧经 `webContents.send` 推送。
+- **DSH 版本约束**：desktop surface 从 DSH 0.1.2 开始使用 Remote API；旧版 0.1.1 的 `apiProxy` 事件通道已退役，升级后必须走 `/api/remote.mux`。
+- **浏览器认证**：DSH 0.1.2 的根页面先经 `authorizeIndex` 用进程启动 token 交换签名 cookie；desktop 通过 `ready` 帧携带 `connection.authenticatedUrl()` 结果，Electron 加载后由协议层处理 303/Set-Cookie，再访问干净的 `/`。
+- **Cookie 由主进程缓存注入**：自定义 protocol 不会可靠保存/回送 303 的 `Set-Cookie`，`apps/electron/main.js` 跟随 303 并缓存 cookie，随后对所有 `protocol.handle` 与 `dsh:fetch` 请求注入，避免 `/api` 请求 401。
 - **patch 编排**：`cordis.patch.yml` 禁用 `webserver`（`dsh-host-webserver`），并关闭 `web-runtime` 的 `openBrowser`/`printUrl`/`surfaceContext`，避免打印/打开假 URL 或向模型注入 loopback URL（`openBrowser` 漏关会导致系统浏览器打开 `http://127.0.0.1:0` 打不开）。
 - electron 开发态作为 dsh-desktop 的 devDependency 安装（`require('electron')` 从工作区 node_modules 解析）；Release 包无需 npm install，插件回退到 `dist/electron/runtime/`（`scripts/package.mjs` 打包生成）。
 - `scripts/package.mjs` 用 `@electron/packager` 把 `apps/electron` 打成各平台运行时（`asar: false`），`npm run dist` 额外生成发布压缩包到 `dist/release/`。
@@ -111,6 +118,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: related_files -->
 - `src/index.js` — desktop surface（提供 webServer 兼容服务 + 拉起 Electron）
+- `src/remote-stream.js` — Typert Gateway Remote 流工厂
 - `src/electron-web-server.js` — 不监听的 webServer 服务（route 注册 + dispatch + fallback）
 - `src/ipc-channel.js` — DSH ↔ Electron fd-3 帧协议与 RPC
 - `apps/electron/main.js` — Electron 主进程（dsh-desktop:// 协议 + fd-3 RPC + titleBarStyle/titleBarOverlay 窗口选项）
@@ -120,7 +128,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `.github/workflows/release.yml` — 推 `v*` tag 时构建三平台产物并创建 GitHub Release
 - `dist/electron/runtime/` — 打包产物（git 忽略），发布态 Electron 运行时
 - `cordis.patch.yml` — 插件编排（desktop surface + 禁用 webserver + 关闭假 URL）
-- `test/index.test.js`、`test/electron-web-server.test.js`、`test/ipc-channel.test.js`、`test/startup.test.js` — 单元测试
+- `test/index.test.js`、`test/electron-web-server.test.js`、`test/ipc-channel.test.js`、`test/remote-stream.test.js`、`test/startup.test.js` — 单元测试
 <!-- CONTENT_END: related_files -->
 
 ---

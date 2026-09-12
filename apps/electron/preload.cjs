@@ -131,35 +131,89 @@ function installWebSocketBridge() {
       this.readyState = IpcWebSocket.CONNECTING;
       this._listeners = new Map();
       this._id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      this._closed = false;
+      this._subscriptions = new Map();
+      this._subscriptionByIpc = new Map();
 
-      if (parsed.pathname === '/api/events.mux') this._stream = 'mux';
-      else if (parsed.pathname === '/api/events.host') this._stream = 'host';
-      else this._stream = null;
-
-      this._onIpcEvent = (event, payload) => {
-        if (payload.id !== this._id) return;
-        const envelope = {
-          type: 'server-request',
-          rpcId: payload.frame.rpcId,
-          method: payload.frame.payload?.type,
-          payload: payload.frame.payload
-        };
-        this._dispatch('message', {
-          type: 'message',
-          data: JSON.stringify(envelope)
-        });
-      };
-
-      if (this._stream === null) {
+      if (parsed.pathname !== '/api/remote.mux') {
         queueMicrotask(() => this._dispatch('error', { type: 'error' }));
         return;
       }
+
+      this._onIpcEvent = (event, payload) => this._handleIpcEvent(payload);
       ipcRenderer.on('dsh:event', this._onIpcEvent);
-      ipcRenderer.send('dsh:subscribe', { id: this._id, stream: this._stream });
       queueMicrotask(() => {
+        if (this._closed) return;
         this.readyState = IpcWebSocket.OPEN;
         this._dispatch('open', { type: 'open' });
       });
+    }
+
+    _handleIpcEvent(payload) {
+      const streamId = this._subscriptionByIpc.get(payload.id);
+      if (streamId === undefined || payload.frame == null) return;
+      const frame = payload.frame;
+      if (frame.kind === 'item') {
+        this._dispatch('message', {
+          type: 'message',
+          data: JSON.stringify({
+            type: 'item',
+            streamId,
+            value: frame.value
+          })
+        });
+        return;
+      }
+      if (frame.kind === 'error') {
+        this._dispatch('error', {
+          type: 'error',
+          message: frame.error?.message
+        });
+        this._finish();
+        return;
+      }
+      if (frame.kind === 'end') this._finish();
+    }
+
+    _subscribe(streamId, message) {
+      const ipcId = `${this._id}:${streamId}`;
+      this._subscriptions.set(streamId, ipcId);
+      this._subscriptionByIpc.set(ipcId, streamId);
+      ipcRenderer.send('dsh:subscribe', {
+        id: ipcId,
+        stream: 'remote-mux',
+        payload: {
+          endpoint: message.endpoint,
+          payload: message.payload ?? { args: {} }
+        }
+      });
+    }
+
+    _unsubscribe(streamId) {
+      const ipcId = this._subscriptions.get(streamId);
+      if (ipcId === undefined) return;
+      this._subscriptions.delete(streamId);
+      this._subscriptionByIpc.delete(ipcId);
+      ipcRenderer.send('dsh:unsubscribe', {
+        id: ipcId,
+        stream: 'remote-mux'
+      });
+    }
+
+    _finish() {
+      if (this._closed) return;
+      this._closed = true;
+      this.readyState = IpcWebSocket.CLOSED;
+      ipcRenderer.off('dsh:event', this._onIpcEvent);
+      for (const ipcId of this._subscriptions.values()) {
+        ipcRenderer.send('dsh:unsubscribe', {
+          id: ipcId,
+          stream: 'remote-mux'
+        });
+      }
+      this._subscriptions.clear();
+      this._subscriptionByIpc.clear();
+      this._dispatch('close', { type: 'close' });
     }
 
     _dispatch(type, event) {
@@ -184,19 +238,32 @@ function installWebSocketBridge() {
       );
     }
 
-    send() {
-      // Downlink-only streams: upstream messages are a protocol violation.
+    send(data) {
+      if (this._closed) return;
+      if (typeof data !== 'string') data = String(data);
+      let message;
+      try {
+        message = JSON.parse(data);
+      } catch {
+        return;
+      }
+      if (message == null || typeof message !== 'object') return;
+      if (message.type === 'open' && typeof message.streamId === 'string') {
+        if (message.streamId.length > 0)
+          this._subscribe(message.streamId, message);
+        return;
+      }
+      if (
+        message.type === 'cancel' &&
+        typeof message.streamId === 'string' &&
+        message.streamId.length > 0
+      ) {
+        this._unsubscribe(message.streamId);
+      }
     }
 
     close() {
-      if (this.readyState === IpcWebSocket.CLOSED) return;
-      this.readyState = IpcWebSocket.CLOSED;
-      ipcRenderer.off('dsh:event', this._onIpcEvent);
-      ipcRenderer.send('dsh:unsubscribe', {
-        id: this._id,
-        stream: this._stream
-      });
-      this._dispatch('close', { type: 'close' });
+      this._finish();
     }
   }
 
