@@ -36,17 +36,21 @@ src/index.js apply(ctx)
 Electron creates a frameless BrowserWindow and loads dsh-desktop://127.0.0.1/
         │  the main process forwards static/API requests over fd-3 to DSH
         ▼
-preload.cjs bridges fetch/WebSocket → ipcRenderer → main process → fd-3 → DSH services
+preload.cjs bridges fetch and /api/remote.mux → ipcRenderer → main process → fd-3 → DSH services
         │
         ▼
-preload.cjs injects the DSH-styled title bar and bridges fetch/WebSocket to IPC
+preload.cjs injects the DSH-styled title bar and bridges fetch plus /api/remote.mux to IPC
 ```
+
+The Electron main process completes DSH 0.1.2's token/cookie exchange and
+injects the signed cookie into every bridged request; the desktop still never
+opens a TCP listener.
 
 ## Requirements
 
 - Node.js 24+ (the repo is pure ESM, `"type": "module"`)
 - npm (for installing dependencies and running development scripts)
-- DSH CLI (`dsh`, rc.6 or later recommended)
+- DSH CLI (`dsh`, 0.1.2-rc.1 or later with the Remote API)
 - Model credentials configured in DSH before running real sessions (e.g. `DEEPSEEK_API_KEY`)
 
 ## Installation
@@ -94,7 +98,7 @@ Notes:
 
 - `dsh plugin add` forwards the remaining arguments to pnpm inside the profile directory, so pnpm's `link:` protocol is supported.
 - In development the plugin resolves `electron` from this repo's `node_modules` (so step 2, `npm install`, is required); if that is missing, it falls back to the packaged Electron runtime under `dist/electron/runtime/`.
-- Apart from Electron, DSH host modules (the web frontend, `dsh-web-app`, `dsh-client-connection`, `dsh-host-apiproxy`, etc.) are resolved by the DSH runtime, so this package declares no runtime dependencies.
+- Apart from Electron, DSH host modules (the web frontend, `dsh-web-app`, `dsh-client-connection`, `dsh-api-gateway`, `dsh-api-remotes`, etc.) are resolved by the DSH runtime, so this package declares no runtime dependencies.
 
 ## Usage
 
@@ -140,7 +144,7 @@ dsh-desktop/
 │   └── startup.js             # session-identity helper (not referenced by the current patch)
 ├── apps/electron/
 │   ├── main.js                # Electron main process: dsh-desktop:// protocol, fd-3 RPC, frameless window
-│   ├── preload.cjs            # preload: fetch/WebSocket bridge + top drag strip + custom close button
+│   ├── preload.cjs            # preload: fetch + /api/remote.mux bridge + DSH-styled title bar
 │   └── package.json           # Electron app metadata
 ├── test/
 │   ├── index.test.js

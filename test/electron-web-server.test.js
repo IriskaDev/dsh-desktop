@@ -99,6 +99,10 @@ test('renderIndex renders structured injections then applies raw taps', () => {
     src: '/plugins/app.js'
   });
   rows.push({
+    kind: 'script-preload',
+    src: '/plugins/preload.js'
+  });
+  rows.push({
     kind: 'html',
     placement: 'body',
     html: '<div id="root"></div>'
@@ -108,8 +112,13 @@ test('renderIndex renders structured injections then applies raw taps', () => {
     '<html><head><title>__TITLE__</title></head><body></body></html>'
   );
   assert.match(html, /<script src="\/plugins\/app\.js"><\/script>/);
+  assert.match(
+    html,
+    /<link rel="preload" as="script" href="\/plugins\/preload\.js">/
+  );
   assert.match(html, /<div id="root"><\/div>/);
   assert.match(html, /<title>DSH<\/title>/);
+  assert.match(html, /__DSH_BOOT_READY__/);
   // Head injections land after <head>, body injections after <body>.
   assert.ok(html.indexOf('<head>') < html.indexOf('<script src'));
   assert.ok(html.indexOf('</head>') > html.indexOf('<script src'));
@@ -147,13 +156,16 @@ test('fallback renders index through renderIndex like dsh-host-frontend-static',
   assert.equal(root.status, 200);
   const html = root.body.toString('utf8');
   assert.match(html, /<script src="\/plugins\/app\.js"><\/script>/);
-  assert.match(html, /<body>dsh-desktop<\/body>/);
+  assert.match(html, /<body><script>\(globalThis\.__DSH_BOOT_READY__/);
+  assert.match(html, /<\/script>dsh-desktop<\/body>/);
 });
 
 test('renderIndex works without a context (no injection subscribers)', () => {
   const server = createElectronWebServer();
   const html = server.renderIndex('<html><head></head><body>hi</body></html>');
-  assert.equal(html, '<html><head></head><body>hi</body></html>');
+  assert.match(html, /<body><script>\(globalThis\.__DSH_BOOT_READY__/);
+  assert.match(html, /<\/script>hi<\/body>/);
+  assert.match(html, /__DSH_BOOT_READY__/);
 });
 
 test('collectIndexInjections emits one fresh table per call', () => {

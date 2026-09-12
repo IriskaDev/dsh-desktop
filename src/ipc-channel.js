@@ -125,7 +125,8 @@ export function createParentIpcChannel(socket, handlers) {
         },
         () => {
           subscriptions.delete(message.id);
-        }
+        },
+        message.payload
       );
       subscriptions.set(message.id, disposer);
       return;

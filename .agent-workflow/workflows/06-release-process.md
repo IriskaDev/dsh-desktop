@@ -1,6 +1,6 @@
 ﻿<!-- MODULE: release-process -->
-<!-- STATUS: PARTIAL -->
-<!-- LAST_ANALYZED: 2026-08-15 -->
+<!-- STATUS: DONE -->
+<!-- LAST_ANALYZED: 2026-09-12 -->
 <!-- ANALYZER_VERSION: 1.0 -->
 
 # 发布流程
@@ -12,10 +12,11 @@
 ## 概述
 
 <!-- CONTENT_START: overview -->
-项目处于早期验证阶段，尚无正式发布流程。版本号存于 `package.json`（当前 `0.0.1`）。后续 Electron 桌面客户端成型后需建立发布流程（跨平台打包 + GitHub Release）。
+项目已建立正式发布流程：版本号写入 `package.json` 与 `package-lock.json`，发布提交经 PR 合入 `main` 后推送 `v<semver>` tag；tag 触发 `.github/workflows/release.yml`，在 Linux / Windows / macOS 三平台矩阵执行 lint、测试与 Electron 打包，汇总 `dist/release/*` 后由 `softprops/action-gh-release` 创建 GitHub Release，并自动生成 release notes。
 
-- 发布流程：未建立
+- 发布流程：SemVer 版本提交 + tag 触发 GitHub Actions 发布
 - 版本管理：SemVer（`package.json` version）
+- 发布产物：`dsh-desktop-<version>-<platform>-<arch>.zip`（Windows）或 `.tar.gz`（Linux / macOS）
 <!-- CONTENT_END: overview -->
 
 ---
@@ -25,9 +26,11 @@
 <!-- CONTENT_START: versioning -->
 | 项目 | 说明 |
 |------|------|
-| 版本号规范 | SemVer：MAJOR.MINOR.PATCH（当前 `0.0.1`） |
-| 版本号存储位置 | `package.json` 的 `version` 字段 |
-| 版本更新命令 | 待补充（如 `npm version patch/minor/major`，或手动编辑） |
+| 版本号规范 | SemVer：MAJOR.MINOR.PATCH |
+| 版本号存储位置 | `package.json` 与 `package-lock.json` 顶层的 `version` 字段 |
+| 版本更新命令 | `npm version patch/minor/major --no-git-tag-version`，或同步手工编辑上述两个文件 |
+| 版本提交规范 | `chore(release): bump version to <version>`，经 PR 合入 `main` 后再打 tag |
+| Tag 规范 | `v<version>`，例如 `v0.3.1`；tag 推送即触发 GitHub Release |
 <!-- CONTENT_END: versioning -->
 
 ---
@@ -42,7 +45,7 @@
 | 开发环境 | 本地开发 | 无 | 本地 |
 | 测试环境 | - | - | - |
 | 预发环境 | - | - | - |
-| 生产环境 | - | - | - |
+| 生产环境 | GitHub Release 资产 | `.github/workflows/release.yml` | GitHub Releases |
 <!-- CONTENT_END: environments -->
 
 ---
@@ -52,9 +55,9 @@
 <!-- CONTENT_START: changelog -->
 | 项目 | 说明 |
 |------|------|
-| CHANGELOG 文件位置 | 无（待建立） |
-| 变更日志格式 | 待补充（如 Keep a Changelog） |
-| 自动生成工具 | 无（待补充，如 standard-version / release-it） |
+| CHANGELOG 文件位置 | 无独立 `CHANGELOG.md` |
+| 变更日志格式 | GitHub Release notes（由 GitHub 根据提交 / PR 自动生成） |
+| 自动生成工具 | `softprops/action-gh-release` 的 `generate_release_notes: true` |
 <!-- CONTENT_END: changelog -->
 
 ---
@@ -65,7 +68,7 @@
 
 ### Step 1 · 确认发布范围与版本号
 
-- 确认本次发布包含的功能列表（来自 Issue / CHANGELOG）
+- 确认本次发布包含的功能列表（来自任务书 / 已合入 PR）
 - 根据变更类型确定版本号递增规则：
   - 不兼容的 API 变更 → MAJOR 版本
   - 向下兼容的新功能 → MINOR 版本
@@ -77,17 +80,17 @@
 ### Step 2 · 确认/切换发布分支
 
 <!-- CONTENT_START: release_branch -->
-> 未建立发布分支策略（当前仅 `main` 分支）。参考 [分支提交规范](../workflows/11-branch-commit.md)。
+> `main` 禁止直接推送；版本号变更通过短期 `chore/release-<version>` 分支提交 PR 合入。参考 [分支提交规范](../workflows/11-branch-commit.md)。
 
 ```bash
-# 常规发布：基于开发分支创建 release 分支（待补充）
-git checkout <开发分支>
-git pull
-git checkout -b release/<版本号>
+# 常规发布：基于最新 main 创建 release 分支
+git checkout main
+git pull origin main
+git checkout -b chore/release-<version>
 
 # Hotfix 发布：直接基于生产分支（当前为 main）
 git checkout main
-git pull
+git pull origin main
 git checkout -b hotfix/<简述>
 ```
 <!-- CONTENT_END: release_branch -->
@@ -98,9 +101,17 @@ git checkout -b hotfix/<简述>
 
 <!-- CONTENT_START: version_bump_cmd -->
 ```bash
-# 待补充：更新版本号
-# 建议：npm version patch/minor/major（更新 package.json version）
+## Bug 修复 / 兼容性修复 → patch
+npm version patch --no-git-tag-version
+
+## 向后兼容的新功能 → minor
+npm version minor --no-git-tag-version
+
+## 不兼容变更 → major
+npm version major --no-git-tag-version
 ```
+
+`npm version` 会同步更新 `package.json` 与 `package-lock.json` 的版本号；不要在版本提交中打 tag，tag 在 PR 合入 `main` 后创建。
 <!-- CONTENT_END: version_bump_cmd -->
 
 ---
@@ -112,9 +123,10 @@ git checkout -b hotfix/<简述>
 
 <!-- CONTENT_START: changelog_cmd -->
 ```bash
-# 待补充：自动生成或手动更新 CHANGELOG
-# 本项目暂无 CHANGELOG 文件
+# 无独立 CHANGELOG；发布说明由 release workflow 自动生成
 ```
+
+如需人工补充发布说明，可在 tag 推送后编辑生成的 GitHub Release；默认不改用 CHANGELOG 文件。
 <!-- CONTENT_END: changelog_cmd -->
 
 ---
@@ -125,7 +137,10 @@ git checkout -b hotfix/<简述>
 
 <!-- CONTENT_START: release_build_cmd -->
 ```bash
-# 待补充：全量编译（所有目标平台）—— 零 build 项目，Electron 打包后补充
+# 本地仅验证当前平台产物（可选）
+npm run dist
+
+# 全平台产物由 release workflow 的三平台 matrix 生成
 ```
 <!-- CONTENT_END: release_build_cmd -->
 
@@ -139,14 +154,18 @@ git checkout -b hotfix/<简述>
 
 <!-- CONTENT_START: release_test_cmd -->
 ```bash
-# 待补充：运行全量单元测试 + 集成测试（本项目暂无测试）
+npm test
+npm run lint
+npm run format:check
 ```
+
+release workflow 的每个平台任务会再次执行 `npm run lint` 与 `npm test`；CI 门禁见 [CI/CD 流程](../workflows/13-ci-cd-pipeline.md)。
 <!-- CONTENT_END: release_test_cmd -->
 
 **判断**：
 - 全部通过 → 继续 Step 7
 - 有失败（发布阻塞级）→ 修复后重新走 Step 4~6
-- 有失败（已知存量问题）→ 记录到 CHANGELOG，评估是否可发布
+- 有失败（已知存量问题）→ 记录到任务书 / PR，评估是否可发布
 
 ---
 
@@ -154,10 +173,14 @@ git checkout -b hotfix/<简述>
 
 <!-- CONTENT_START: package_cmd -->
 ```bash
-# 待补充：打包发布产物（Electron 用 electron-builder 等）
+# 生成 Electron runtime（仅当前平台）
+npm run package
+
+# 生成 runtime + 可分发压缩包
+npm run dist
 ```
 
-**产物输出路径**：待补充
+**产物输出路径**：`dist/release/dsh-desktop-<version>-<platform>-<arch>.zip|.tar.gz`
 <!-- CONTENT_END: package_cmd -->
 
 ---
@@ -165,25 +188,33 @@ git checkout -b hotfix/<简述>
 ### Step 8 · 提交版本变更并打 Tag
 
 <!-- CONTENT_START: tag_cmd -->
-> 未建立 CHANGELOG；生产分支当前为 `main`。
+> PR 合入 `main` 后创建 tag；tag 推送触发 `release.yml`，不要手工执行打包后直接上传 Release。
 
 ```bash
-git add <版本号文件>          # 如 package.json；CHANGELOG.md 待建立后加入
-git commit -m "chore(release): v<版本号>"
-git tag v<版本号>
-git push origin main --tags
+git add package.json package-lock.json
+git commit -m "chore(release): bump version to <version>"
+git push -u origin chore/release-<version>
+gh pr create --base main --head chore/release-<version> --title "chore(release): bump version to <version>"
+gh pr merge --squash --delete-branch
+
+git checkout main
+git pull origin main
+git tag v<version>
+git push origin v<version>
 ```
 <!-- CONTENT_END: tag_cmd -->
 
 ---
 
-### Step 9 · 提交发布 PR
+### Step 9 · 等待 tag 触发的 Release workflow
 
-参考 [PR 提交流程](../workflows/12-pull-request.md) 创建 PR：
-- **release → 生产分支**（合并发布内容）
-- **release → 开发分支**（同步版本号和 CHANGELOG 变更）
+tag 推送后检查 GitHub Actions：
 
-PR 描述需包含：版本号、变更摘要、测试结论。
+- `Release / Package (ubuntu-latest|windows-latest|macos-latest)` 全部通过
+- 三个平台的 `dist/release/*` 均上传成功
+- `Release / Create GitHub Release` 成功创建 Release
+
+release workflow 的触发与产物细节见 [CI/CD 流程](../workflows/13-ci-cd-pipeline.md)。
 
 ---
 
@@ -192,15 +223,18 @@ PR 描述需包含：版本号、变更摘要、测试结论。
 <!-- CONTENT_START: deploy_cmd -->
 > 本项目为桌面客户端，部署 = 发布安装包（GitHub Release 等），无服务端部署。
 
-**部署顺序**：不适用（无测试/预发/生产环境）
+**部署顺序**：tag 推送 → 三平台矩阵打包 → 上传 Release 资产
 
 ```bash
-# 待补充：发布安装包到 GitHub Release
+# release workflow 自动执行：
+# npm ci → npm run lint → npm test → npm run dist
+# → softprops/action-gh-release
 ```
 
 **回滚命令**：
 ```bash
-# 待补充：安装包回滚（重新安装旧版本）
+# 桌面客户端回滚 = 重新下载旧版本 Release 资产并覆盖安装；
+# 如需回到旧版本，安装对应 tag 的历史 Release 即可。
 ```
 <!-- CONTENT_END: deploy_cmd -->
 
@@ -209,12 +243,13 @@ PR 描述需包含：版本号、变更摘要、测试结论。
 ### Step 11 · 发布后验证
 
 - 在目标环境验证核心功能是否正常
-- 检查监控/告警平台是否有异常指标
-- 确认本次版本的关键需求已按预期上线
+- 检查 GitHub Actions 的 `Release` workflow 是否全绿
+- 检查 GitHub Release 是否包含三个平台资产
+- 抽查至少一个平台压缩包，确认版本号与核心功能正常
 
 **判断**：
-- 验证通过 → 发布完成，在 Issue 中关闭相关单据
-- 发现问题 → 评估严重程度，决定是否回滚或提紧急 Hotfix
+- 验证通过 → 发布完成，在相关 Issue / 任务中关闭单据
+- 发现问题 → 评估严重程度，决定撤回 Release、重打 tag 或提紧急 Hotfix
 
 ---
 
@@ -223,16 +258,16 @@ PR 描述需包含：版本号、变更摘要、测试结论。
 > 适用于生产环境紧急故障，需跳过常规发布节奏快速上线。
 
 <!-- CONTENT_START: hotfix_release -->
-> 未建立 Hotfix 发布流程（项目早期，仅 `main` 分支）。
+> Hotfix 发布沿用常规流程，仅将修复分支改为 `hotfix/<简述>`；修复 PR 合入 `main` 后按 patch 版本号发 tag。
 
 **与常规发布的差异**：
 - 基于生产分支（`main`）直接修复
-- 可简化 CHANGELOG、缩小测试范围
-- 修复合并后须同步回开发分支（如有）
+- 可缩小测试范围，但仍必须通过 release workflow 的 lint + test
+- 修复合并后立即创建对应 patch 版本 tag，并按需补充 Release notes
 
 ```bash
 git checkout main
-git pull
+git pull origin main
 git checkout -b hotfix/<简述>
 ```
 <!-- CONTENT_END: hotfix_release -->
@@ -242,8 +277,10 @@ git checkout -b hotfix/<简述>
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- `package.json` — 版本号（`0.0.1`）
-- 无 CHANGELOG / 发布配置 / 部署配置
+- `package.json` / `package-lock.json` — 版本号
+- `.github/workflows/release.yml` — tag 触发的三平台打包与 GitHub Release
+- `scripts/package.mjs` — Electron runtime 与发布压缩包生成脚本
+- 无独立 CHANGELOG（使用 GitHub Release notes）
 <!-- CONTENT_END: related_files -->
 
 ---
