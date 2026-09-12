@@ -14,7 +14,7 @@
 <!-- CONTENT_START: overview -->
 本项目的「开发」= 改 DSH surface 插件（`src/*.js` + `cordis.patch.yml`）并通过真实 profile 流式跑通。零 build（纯 ESM 无需编译），已引入 lint / format / test 工具链。
 
-- **前置条件**：Node v26.2.0 + DSH rc.6 + 已 link 的 `~/.dsh/profiles/desktop`
+- **前置条件**：Node v26.2.0 + DSH 0.1.5-rc.1+ + 已 link 的 `~/.dsh/profiles/dsh-desktop`（`desktop` 名称自 0.1.5 起被官方 Electron 保留）
 - **验证手段**：`npm run lint` / `npm run format:check` / `npm test`
 <!-- CONTENT_END: overview -->
 
@@ -40,8 +40,11 @@
 # 安装开发工具链（eslint / prettier / commitlint / husky；运行时零依赖）
 npm install
 
+# 首次创建非保留 profile（从 web 模板初始化后退出）
+dsh --profile dsh-desktop --from-default-profile web --dump-config
+
 # 插件通过 profile link 方式安装（运行时加载）
-dsh plugin --profile desktop add link:D:\workbench\projects\dsh-desktop
+dsh plugin --profile dsh-desktop add link:D:\workbench\projects\dsh-desktop
 ```
 <!-- CONTENT_END: dependency_install -->
 
@@ -52,7 +55,7 @@ dsh plugin --profile desktop add link:D:\workbench\projects\dsh-desktop
 <!-- CONTENT_START: local_run -->
 ```bash
 # 端到端跑一次（stdin 传入首轮用户输入）：
-"帮我看看当前目录" | dsh --profile desktop
+"帮我看看当前目录" | dsh --profile dsh-desktop
 ```
 
 **访问地址**：无（CLI 进程，stdout 输出 JSONL）

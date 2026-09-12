@@ -15,6 +15,14 @@
 - id: webserver
   disabled: true
 
+# DSH 0.1.5 client-modules reads `webServer` directly while composing the
+# browser roster. When the real webserver is disabled, declare the dependency
+# explicitly so the loader waits for the desktop webServer provider instead of
+# throwing `cannot get property "webServer" without inject`.
+- id: modules
+  inject:
+    - webServer
+
 # No real URL exists in the offline desktop shape; keep the web-app glue from
 # printing one, opening it in the default browser, or injecting a loopback URL
 # into the model/system prompt. The Electron window is the only surface.

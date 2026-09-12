@@ -6,13 +6,13 @@ Languages: English | [简体中文](./README.zh-CN.md)
 
 ## Overview
 
-`dsh-desktop` is a DSH bundle patch plugin (`cordis.patch.yml`) that provides a surface named `desktop`. When DSH boots with the `desktop` profile, the plugin disables DSH's `node:http` web server, provides a non-listening `webServer`-shaped service, and launches a native Electron window that loads the DSH Web UI through a custom `dsh-desktop://` protocol.
+`dsh-desktop` is a DSH bundle patch plugin (`cordis.patch.yml`) that provides a desktop surface. Starting with DSH 0.1.5, the `desktop` profile name is reserved for the official Electron application and the CLI rejects boot, config-dump, and plugin-management requests for it; this project therefore uses the non-reserved `dsh-desktop` profile. The plugin disables DSH's `node:http` web server, provides a non-listening `webServer`-shaped service, and launches a native Electron window that loads the DSH Web UI through a custom `dsh-desktop://` protocol.
 
-Unlike `dsh web`, which starts a local HTTP server and requires you to open a browser manually, `dsh --profile desktop` reuses the entire DSH Web frontend and Cordis services with **no TCP listener**: Electron loads the frontend through a custom protocol, and `fetch` plus the event streams are bridged over IPC to the host process.
+Unlike `dsh web`, which starts a local HTTP server and requires you to open a browser manually, `dsh --profile dsh-desktop` reuses the entire DSH Web frontend and Cordis services with **no TCP listener**: Electron loads the frontend through a custom protocol, and `fetch` plus the event streams are bridged over IPC to the host process.
 
 ## Features
 
-- **One command, ready to use**: `dsh --profile desktop` opens the desktop window automatically — no need to visit the browser.
+- **One command, ready to use**: `dsh --profile dsh-desktop` opens the desktop window automatically — no need to visit the browser.
 - **No local HTTP server**: no `node:http` and no TCP listening port; static assets, APIs, and event streams all travel over Electron IPC / custom protocol.
 - **Full DSH Web reuse**: the frontend UI, session/workspace persistence, agent, and tools are all provided by DSH's existing Cordis services.
 - **DSH-styled title bar**: the OS title bar is hidden, but a preload script injects a visible title bar styled with DSH's theme tokens, while the native minimize/maximize/close controls stay as a color-matched overlay.
@@ -23,7 +23,7 @@ Unlike `dsh web`, which starts a local HTTP server and requires you to open a br
 ## How It Works
 
 ```text
-dsh --profile desktop
+dsh --profile dsh-desktop
         │
         ▼
 DSH boot (web-app bundle + desktop patch)
@@ -50,7 +50,7 @@ opens a TCP listener.
 
 - Node.js 24+ (the repo is pure ESM, `"type": "module"`)
 - npm (for installing dependencies and running development scripts)
-- DSH CLI (`dsh`, 0.1.2-rc.1 or later with the Remote API)
+- DSH CLI (`dsh`, 0.1.2-rc.1 or later with the Remote API; use the `dsh-desktop` profile on DSH 0.1.5+)
 - Model credentials configured in DSH before running real sessions (e.g. `DEEPSEEK_API_KEY`)
 
 ## Installation
@@ -62,14 +62,21 @@ opens a TCP listener.
    `dsh-desktop-0.1.0-linux-x64.tar.gz` (Linux), or
    `dsh-desktop-0.1.0-darwin-*` (macOS).
 2. Extract it anywhere.
-3. Link the extracted directory into DSH's desktop profile:
+3. Link the extracted directory into DSH's `dsh-desktop` profile. If the profile does not exist yet, initialize it once first:
+
+```bash
+# First use only; DSH >= 0.1.5
+dsh --profile dsh-desktop --from-default-profile web --dump-config
+```
+
+Then install the plugin:
 
 ```bash
 # Windows
-dsh plugin --profile desktop add link:D:\path\to\dsh-desktop-0.1.0-win32-x64
+dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop-0.3.1-win32-x64
 
 # macOS / Linux
-dsh plugin --profile desktop add "link:/path/to/dsh-desktop-0.1.0-linux-x64"
+dsh plugin --profile dsh-desktop add "link:/path/to/dsh-desktop-0.3.1-linux-x64"
 ```
 
 Release archives bundle a platform-specific Electron runtime under
@@ -86,12 +93,15 @@ cd dsh-desktop
 # 2. Install development dependencies (includes Electron; this package has no dependencies)
 npm install
 
-# 3. Link this plugin into DSH's desktop profile
+# 3. Link this plugin into DSH's dsh-desktop profile
+# If the profile does not exist yet, initialize it first:
+dsh --profile dsh-desktop --from-default-profile web --dump-config
+
 # Windows
-dsh plugin --profile desktop add link:D:\path\to\dsh-desktop
+dsh plugin --profile dsh-desktop add link:D:\path\to\dsh-desktop
 
 # macOS / Linux
-dsh plugin --profile desktop add "link:$(pwd)"
+dsh plugin --profile dsh-desktop add "link:$(pwd)"
 ```
 
 Notes:
@@ -103,7 +113,7 @@ Notes:
 ## Usage
 
 ```bash
-dsh --profile desktop
+dsh --profile dsh-desktop
 ```
 
 After startup, the Electron window opens automatically and loads the DSH Web UI — just chat in the window.
@@ -111,7 +121,7 @@ After startup, the Electron window opens automatically and loads the DSH Web UI 
 To inspect arguments forwarded to the web app:
 
 ```bash
-dsh --profile desktop --help
+dsh --profile dsh-desktop --help
 ```
 
 ## Development
