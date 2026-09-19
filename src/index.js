@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { createElectronWebServer } from './electron-web-server.js';
+import { detach as detachLaunch, shouldDetach } from './detach.js';
 import { createParentIpcChannel, sendFrame } from './ipc-channel.js';
 import { createRemoteStreamFactory } from './remote-stream.js';
 
@@ -122,6 +123,41 @@ export function resolveDesktopUrl(ctx) {
 }
 
 /**
+ * Re-execute this same invocation as a detached process so the caller's
+ * terminal is released: `dsh --profile dsh-desktop` returns to the shell
+ * prompt immediately while the window, the agent, and the IPC server live on
+ * in the child. The whole command line is replayed, so launcher flags such as
+ * `--profile` and `--patch` survive the hand-off.
+ * @param ctx - the plugin context carrying the launcher's `appExit` request.
+ * @returns true when the instance was handed off and this process should exit.
+ */
+function startDetached(ctx) {
+  let spawned;
+  try {
+    spawned = detachLaunch();
+  } catch (error) {
+    process.stderr.write(`desktop: failed to detach: ${error.message}\n`);
+    return false;
+  }
+  if (spawned === null) return false;
+
+  process.stdout.write(
+    `desktop: window starting in the background; close it to stop the session\n` +
+      `desktop: log: ${spawned.logPath}\n`
+  );
+
+  const exit = ctx.get('appExit');
+  if (typeof exit === 'function') {
+    exit(0);
+    return true;
+  }
+  // Without the launcher's exit request there is nothing left to do here;
+  // the child owns the instance now.
+  setTimeout(() => process.exit(0), 50).unref();
+  return true;
+}
+
+/**
  * The desktop surface: a native Electron window loading the DSH web UI with no
  * HTTP server. This plugin provides a `webServer`-shaped service that never
  * listens; `dsh-web-app` and `dsh-client-connection` register their routes
@@ -129,6 +165,12 @@ export function resolveDesktopUrl(ctx) {
  * those routes over the fd-3 IPC pipe.
  */
 export function apply(ctx) {
+  // Interactive launches hand off to a detached instance first, so the shell
+  // returns at once; the child replays this same command line and therefore
+  // boots the surface for real. Piped, non-TTY, and already-detached launches
+  // (`DSH_DESKTOP_DETACHED`) fall through to the in-process surface below.
+  if (shouldDetach() && startDetached(ctx)) return;
+
   const webServer = createElectronWebServer(ctx);
   ctx.provide('webServer', webServer);
 
