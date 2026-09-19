@@ -22,6 +22,17 @@ const PACKAGED_RUNTIME_DIR = fileURLToPath(
   new URL('../dist/electron/runtime', import.meta.url)
 );
 
+/**
+ * Longest Unix socket path `listen()` accepts. macOS `sockaddr_un.sun_path`
+ * is a fixed-size buffer, and the default per-user tmpdir
+ * (`/var/folders/<x>/<hash>/T`) plus the generated socket name overflows it,
+ * which `listen()` rejects with `EINVAL`.
+ */
+const MAX_UNIX_SOCKET_PATH_BYTES = 104;
+
+/** Fallback socket directory for tmpdirs too long to hold a socket path. */
+const SHORT_IPC_DIR = '/tmp';
+
 function packagedElectronPath() {
   if (process.platform === 'win32') {
     return join(PACKAGED_RUNTIME_DIR, 'dsh-desktop-electron.exe');
@@ -52,6 +63,40 @@ function resolveElectron() {
     return { electronPath: packagedPath, args: [] };
   }
   return null;
+}
+
+/**
+ * Resolve the local-only IPC path: a named pipe on Windows, a Unix socket
+ * elsewhere. The socket path falls back to a short directory when `os.tmpdir()`
+ * would push it past {@link MAX_UNIX_SOCKET_PATH_BYTES}; otherwise `listen()`
+ * fails with `EINVAL` on macOS before Electron is ever spawned.
+ * @param platform - the platform to resolve for; defaults to the current one.
+ * @param tmpdir - the candidate directory; defaults to `os.tmpdir()`.
+ * @returns the IPC path, shared with Electron through the environment.
+ */
+export function resolveIpcPath(
+  platform = process.platform,
+  tmpdir = os.tmpdir()
+) {
+  const stem = `dsh-desktop-${process.pid}-${randomUUID()}`;
+  if (platform === 'win32') return `\\\\.\\pipe\\${stem}`;
+  const name = `${stem}.sock`;
+  const preferred = join(tmpdir, name);
+  return Buffer.byteLength(preferred) > MAX_UNIX_SOCKET_PATH_BYTES
+    ? join(SHORT_IPC_DIR, name)
+    : preferred;
+}
+
+/**
+ * Report a desktop-surface startup failure to the host logger and to stderr.
+ * These failures all happen before a window exists, so a host-only log leaves
+ * `dsh --profile dsh-desktop` looking alive while nothing happens on screen.
+ * @param ctx - the plugin context whose logger receives the message.
+ * @param message - the failure description, already scoped to this plugin.
+ */
+export function reportStartupFailure(ctx, message) {
+  ctx.logger?.warn?.(message);
+  process.stderr.write(`${message}\n`);
 }
 
 /**
@@ -114,7 +159,8 @@ export function apply(ctx) {
   const launch = () => {
     const electron = resolveElectron();
     if (!electron) {
-      ctx.logger?.warn?.(
+      reportStartupFailure(
+        ctx,
         'desktop: electron is not available; skipping Electron launch'
       );
       return;
@@ -123,10 +169,7 @@ export function apply(ctx) {
     // Local-only IPC transport: a named pipe (Windows) or Unix socket
     // (macOS/Linux). This is not a TCP listener; the renderer talks to the
     // host through Electron's own IPC plus this single parent<->main channel.
-    const ipcPath =
-      process.platform === 'win32'
-        ? `\\\\.\\pipe\\dsh-desktop-${process.pid}-${randomUUID()}`
-        : join(os.tmpdir(), `dsh-desktop-${process.pid}-${randomUUID()}.sock`);
+    const ipcPath = resolveIpcPath();
 
     ipcServer = net.createServer((socket) => {
       sockets.add(socket);
@@ -210,7 +253,7 @@ export function apply(ctx) {
     });
 
     ipcServer.on('error', (err) => {
-      ctx.logger?.warn?.(`desktop: ipc server error: ${err.message}`);
+      reportStartupFailure(ctx, `desktop: ipc server error: ${err.message}`);
     });
 
     ipcServer.listen(ipcPath, () => {
@@ -225,7 +268,8 @@ export function apply(ctx) {
       });
 
       child.on('error', (err) => {
-        ctx.logger?.warn?.(
+        reportStartupFailure(
+          ctx,
           `desktop: failed to launch Electron: ${err.message}`
         );
         ipcServer.close();

@@ -2,7 +2,7 @@
 <!-- MODULE_GROUP: - -->
 <!-- INVOLVED_CHAINS: - -->
 <!-- STATUS: DONE -->
-<!-- LAST_ANALYZED: 2026-09-12 -->
+<!-- LAST_ANALYZED: 2026-09-19 -->
 <!-- ANALYZER_VERSION: 1.6 -->
 
 # desktop surface（Electron 桌面外壳，无后台服务）
@@ -43,6 +43,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 <!-- CONTENT_START: core_interfaces -->
 - `name = 'desktop'` — 插件名
 - `apply(ctx)` — 提供 `webServer` 兼容服务、注册 Typert Remote 流源、spawn Electron
+- `resolveIpcPath(platform, tmpdir)` — 生成本地 IPC 路径（Windows 命名管道 / Unix socket），超 104 字节回退 `/tmp`
+- `reportStartupFailure(ctx, message)` — 启动期故障同时写 host logger 与 stderr（避免静默失败）
 - `createRemoteStreamFactory(ctx)` — 等待 `typertGateway` 并打开 Remote 流（`wireStream.open`）
 - `createElectronWebServer(ctx)` — 不监听的 webServer 服务：`register` / `registerUpgrade` / `registerFallback` / `tapIndex` / `applyIndexTaps` / `collectIndexInjections` / `renderIndex` / `dispatch`；`renderIndex` 与真实 `dsh-host-webserver` 一致（支持 `script-preload`、结构化注入行、boot-ready tail、后原始 tap），`collectIndexInjections` 经 `ctx.emit('webserver/index-inject')` 收集 boot manifest / theme 等注入行
 - `createParentIpcChannel(socket, handlers)` — DSH 侧 IPC 帧协议与 RPC（4 字节 little-endian 长度 + UTF-8 JSON）
@@ -97,6 +99,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 <!-- CONTENT_START: caution -->
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量，不走 argv。
 - **本地 IPC**：DSH 与 Electron 主进程经命名管道（Windows `\\.\pipe\...`）或 Unix socket 通信；Electron 侧用 `net.connect(DSH_ELECTRON_IPC_PATH)` 接入。父进程先退出时该通道自动关闭。
+- **Unix socket 路径长度上限（macOS 默认必踩）**：路径由 `resolveIpcPath(platform, tmpdir)` 生成——非 Windows 优先用 `os.tmpdir()`，拼出路径超过 104 字节时回退到 `/tmp`。104 是实测上限（104 通过 / 105 `EINVAL`，对应 macOS `sockaddr_un.sun_path`）。macOS 默认 `TMPDIR` 为 `/var/folders/<x>/<hash>/T`（49 字节），加 `dsh-desktop-<pid>-<uuid>.sock`（59 字节）共 108 字节，`listen()` 必失败。
+- **启动期故障必须打到 stderr**：spawn Electron 写在 `listen()` 的成功回调里，listen 一失败就完全跳过启动；若只走 `ctx.logger.warn`，CLI 前台静默，表现为「dsh 进程活着但永远没有窗口」。故所有启动期故障（electron 不可用 / ipc server error / spawn 失败）统一经 `reportStartupFailure(ctx, message)` 同时写 host logger 与 stderr。
 - **启动并行化**：`apply` 阶段即 spawn Electron，让 Electron 冷启动与 DSH loader 结算重叠；DSH 侧在 loader 结算 + Typert Gateway 就绪后发送 `ready` 帧，Electron 收到后才创建窗口，避免路由未注册就发起首屏请求。
 - **WebSocket 由 preload 模拟 Remote mux**：渲染进程的 `WebSocket('/api/remote.mux')` 被 preload 覆盖为 IPC 订阅，主进程经 fd-3 向 DSH 订阅 `remote-mux` 逻辑流，帧经 `webContents.send` 推送。
 - **DSH 版本约束**：desktop surface 从 DSH 0.1.2 开始使用 Remote API；旧版 0.1.1 的 `apiProxy` 事件通道已退役，升级后必须走 `/api/remote.mux`。DSH 0.1.5 起官方把 `desktop` profile 名称保留给 Electron 应用，本项目使用非保留名 `dsh-desktop`。
