@@ -14,7 +14,7 @@
 ## 功能概述
 
 <!-- CONTENT_START: overview -->
-desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile dsh-desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经本地 IPC（命名管道/Unix socket）RPC 转发给 DSH 侧 dispatch。Remote 事件流（`$events`）及其它 Remote 流由 DSH 侧通过 Typert Gateway 的 `typertGateway.wireStream.open` 获取，经同一 IPC 通道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口隐藏系统原生标题栏（`titleBarStyle: 'hidden'` / macOS `hiddenInset`），但保留原生最小化/最大化/关闭按钮（Windows/Linux 以 `titleBarOverlay` 同色 overlay 呈现）；preload 注入一条 36px 可见的 DSH 风格标题栏（使用 DSH 主题 CSS 变量），并把页面内容下移，不遮挡 DSH 头部。
+desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH 的一个**独立 surface**（与 `web`/`tui`/`headless` 并列）：`dsh --profile dsh-desktop` 自带 agent + Electron 原生窗口，**不监听任何 TCP 端口**。在交互式终端启动时，`apply` 会先把实例交给 detached 子进程并让当前进程退出，命令立刻返回 shell 提示符（详见「注意事项」的前台自动后台化）；子进程据同一命令 boot，继续完成下述初始化。它通过 `ctx.provide('webServer', ...)` 提供一个不监听的 webServer 兼容服务（`src/electron-web-server.js`），`dsh-web-app`/`dsh-client-connection`/`dsh-host-frontend-static` 等 DSH 插件原样把 route/fallback 注册到该服务上；插件随后 spawn Electron（`apps/electron/main.js`，offline 模式），Electron 主进程用 `dsh-desktop://` 协议加载前端，并把所有请求经本地 IPC（命名管道/Unix socket）RPC 转发给 DSH 侧 dispatch。Remote 事件流（`$events`）及其它 Remote 流由 DSH 侧通过 Typert Gateway 的 `typertGateway.wireStream.open` 获取，经同一 IPC 通道推送给渲染进程。agent 由 web-app bundle 的 dsh-base 层驱动。窗口隐藏系统原生标题栏（`titleBarStyle: 'hidden'` / macOS `hiddenInset`），但保留原生最小化/最大化/关闭按钮（Windows/Linux 以 `titleBarOverlay` 同色 overlay 呈现）；preload 注入一条 36px 可见的 DSH 风格标题栏（使用 DSH 主题 CSS 变量），并把页面内容下移，不遮挡 DSH 头部。
 <!-- CONTENT_END: overview -->
 
 ---
@@ -24,8 +24,9 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 <!-- CONTENT_START: entry_points -->
 | 类型 | 入口标识 | 触发函数 | 说明 |
 |------|---------|---------|------|
-| CLI | `dsh --profile dsh-desktop` | `apply(ctx)` | boot dsh-desktop profile，拉起 Electron 窗口 |
+| CLI | `dsh --profile dsh-desktop` | `apply(ctx)` | boot dsh-desktop profile；交互式终端下先转交 detached 子进程、自身退出，窗口与 agent 由子进程承载 |
 | 内部函数 | `desktop`（插件 name） | `apply` | 提供 `webServer` 兼容服务，apply 时立即 spawn Electron，loader 结算后发 `ready` 帧再开窗 |
+| 内部函数 | `desktop-detach`（`src/detach.js`） | `shouldDetach` / `detach` | 前台 TTY 判定、detached re-exec（日志落盘、防递归、启动探针） |
 <!-- CONTENT_END: entry_points -->
 
 ---
@@ -33,7 +34,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 数据流向
 
 <!-- CONTENT_START: data_flow -->
-`dsh --profile dsh-desktop` → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver，并关闭 web-runtime 的 openBrowser/printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 Typert Gateway 就绪后 DSH 侧发携带 `connection.authenticatedUrl()` 结果的 `ready` 帧 → Electron 主进程才创建窗口并加载该带 token 的 `dsh-desktop://127.0.0.1/` 根 URL → 主进程 `protocol.handle` 跟随 303 并缓存签名 cookie，再把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch` 并模拟 `/api/remote.mux` 的 open/item/error/end 桥接到 ipcRenderer，并注入 DSH 风格标题栏 → 渲染进程显示 DSH web 前端。
+`dsh --profile dsh-desktop` → loader 挂载 desktop surface → `apply(ctx)` 判定前台 TTY（`shouldDetach()`，可用 `DSH_DESKTOP_NO_DETACH` 关闭、`DSH_DESKTOP_DETACHED` 防递归）：命中则以 `spawn(execPath, argv.slice(1), { detached, stdio: ['ignore', logFd, logFd] })` 原样 re-exec 同一命令（stdout/stderr 追加到 `$DSH_HOME/desktop.log`），启动探针（`<exec> <launcher> --version`）确认子进程真能起来后 `ctx.appExit(0)` 释放终端；未命中则在当前进程继续 → boot（web-app bundle：dsh-base + web-app；patch 禁用 dsh-host-webserver，并关闭 web-runtime 的 openBrowser/printUrl/surfaceContext）→ desktop surface 提供不监听的 `webServer` 服务 → apply 时立即 spawn `electron apps/electron/main.js`（命名管道/Unix socket 路径 + 父 PID 经环境变量传入）→ `dsh-web-app`/`dsh-client-connection` 注册 route/fallback，loader 结算且 Typert Gateway 就绪后 DSH 侧发携带 `connection.authenticatedUrl()` 结果的 `ready` 帧 → Electron 主进程才创建窗口并加载该带 token 的 `dsh-desktop://127.0.0.1/` 根 URL → 主进程 `protocol.handle` 跟随 303 并缓存签名 cookie，再把静态/API 请求经 IPC RPC 转发给 DSH → preload 覆盖 `fetch` 并模拟 `/api/remote.mux` 的 open/item/error/end 桥接到 ipcRenderer，并注入 DSH 风格标题栏 → 渲染进程显示 DSH web 前端。
 <!-- CONTENT_END: data_flow -->
 
 ---
@@ -42,7 +43,11 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 
 <!-- CONTENT_START: core_interfaces -->
 - `name = 'desktop'` — 插件名
-- `apply(ctx)` — 提供 `webServer` 兼容服务、注册 Typert Remote 流源、spawn Electron
+- `apply(ctx)` — 前台 TTY 时先转交 detached 子进程并 `ctx.appExit(0)`；否则提供 `webServer` 兼容服务、注册 Typert Remote 流源、spawn Electron
+- `shouldDetach(env, streams)` — 判定是否后台化：三路 stdio 全为 TTY 且无 `DSH_DESKTOP_NO_DETACH` / `DSH_DESKTOP_DETACHED`（`src/detach.js`）
+- `detach(options)` — 以 `{ detached: true, stdio: ['ignore', logFd, logFd] }` re-exec 同一 argv（`argv.slice(1)`），注入 `DSH_DESKTOP_DETACHED=1`，启动探针通过后 `unref()`；返回 `{ pid, logPath }`，失败返回 `null` 以便降级为前台
+- `resolveDetachLogPath(env, home)` — 解析后台实例日志路径，默认 `$DSH_HOME/desktop.log`，`DSH_DESKTOP_LOG` 覆盖
+- `isInteractiveTty(streams)` — stdin/stdout/stderr 是否全为 TTY（管道/重定向场景保持前台语义）
 - `resolveIpcPath(platform, tmpdir)` — 生成本地 IPC 路径（Windows 命名管道 / Unix socket），超 104 字节回退 `/tmp`
 - `reportStartupFailure(ctx, message)` — 启动期故障同时写 host logger 与 stderr（避免静默失败）
 - `createRemoteStreamFactory(ctx)` — 等待 `typertGateway` 并打开 Remote 流（`wireStream.open`）
@@ -87,6 +92,10 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `DSH_ELECTRON_MODE=offline`（env）— 通知 Electron 主进程启用无后台模式
 - `DSH_ELECTRON_IPC_PATH`（env）— DSH ↔ Electron 的命名管道/Unix socket 路径
 - `DSH_ELECTRON_PARENT_PID`（env）— 传给 Electron 的父进程 PID（用于自退出检测）
+- `DSH_DESKTOP_DETACHED=1`（env）— 插件写入后台子进程，标记「已是 detached 实例」，防止无限递归后台化
+- `DSH_DESKTOP_NO_DETACH`（env）— 任意非空值关闭前台自动后台化，命令保持占用终端（调试用）
+- `DSH_DESKTOP_LOG`（env）— 后台实例日志路径，默认 `$DSH_HOME/desktop.log`
+- `detach(options)` 返回值 — `{ pid, logPath }`（成功）/ `null`（失败，调用方降级为前台）
 - IPC 帧：4 字节 little-endian 长度 + UTF-8 JSON；新增 `{ type: 'ready' }` 帧用于通知 Electron 路由已就绪
 - remote-mux 订阅帧：`{ type: 'subscribe', id, stream: 'remote-mux', payload: { endpoint, payload } }`
 - DSH → Electron 流帧：`{ type: 'event', id, frame: { kind: 'item' | 'error' | 'end', ... } }`
@@ -97,6 +106,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 注意事项
 
 <!-- CONTENT_START: caution -->
+- **前台自动后台化（detached re-exec）**：交互式 TTY 启动时 `apply` 在**最开头**分叉——先 `detach()` 把同一命令 re-exec 成 detached 子进程（`stdio: ['ignore', logFd, logFd]`，日志 `$DSH_HOME/desktop.log`），再用 `ctx.appExit(0)` 走 launcher 的 bounded shutdown 退出，**不硬杀进程**；父进程因此不提供 webServer、不 spawn Electron、不建 IPC server，整个桌面实例由子进程承载。子进程 stdio 非 TTY 且带 `DSH_DESKTOP_DETACHED=1`，天然不会再次分叉。spawn 失败（同步抛错或启动探针失败）时**降级为前台运行**并打 stderr，不会变成「命令返回了但什么都没有」。
+- **启动探针是必需的**：`spawn()` 失败以异步 `error` 事件上报，而父进程此时已经退出，错误会落进无人接收的事件里、表现为静默失败。故 `detach()` 在交棒前用 `spawnSync('<exec> "<launcher>" --version', { shell: true })` 确认子进程真能起来（退出码 127 = 找不到），失败则 `child.kill()` 并返回 `null`。该探针只跑 launcher 的 `--version`（不 boot tree、不开窗）。
 - **electron CLI 参数坑**：传给 `electron.exe` 的 CLI 参数（尤其 URL 类）会触发崩溃（exit 0xFFFFFFFF），URL/父 PID 一律走环境变量，不走 argv。
 - **本地 IPC**：DSH 与 Electron 主进程经命名管道（Windows `\\.\pipe\...`）或 Unix socket 通信；Electron 侧用 `net.connect(DSH_ELECTRON_IPC_PATH)` 接入。父进程先退出时该通道自动关闭。
 - **Unix socket 路径长度上限（macOS 默认必踩）**：路径由 `resolveIpcPath(platform, tmpdir)` 生成——非 Windows 优先用 `os.tmpdir()`，拼出路径超过 104 字节时回退到 `/tmp`。104 是实测上限（104 通过 / 105 `EINVAL`，对应 macOS `sockaddr_un.sun_path`）。macOS 默认 `TMPDIR` 为 `/var/folders/<x>/<hash>/T`（49 字节），加 `dsh-desktop-<pid>-<uuid>.sock`（59 字节）共 108 字节，`listen()` 必失败。
@@ -122,7 +133,8 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 ## 相关文件
 
 <!-- CONTENT_START: related_files -->
-- `src/index.js` — desktop surface（提供 webServer 兼容服务 + 拉起 Electron）
+- `src/index.js` — desktop surface（前台 TTY 时转交 detached 子进程；否则提供 webServer 兼容服务 + 拉起 Electron）
+- `src/detach.js` — 前台自动后台化（TTY 判定 / detached re-exec / 日志路径 / 启动探针）
 - `src/remote-stream.js` — Typert Gateway Remote 流工厂
 - `src/electron-web-server.js` — 不监听的 webServer 服务（route 注册 + dispatch + fallback）
 - `src/ipc-channel.js` — DSH ↔ Electron fd-3 帧协议与 RPC
@@ -133,7 +145,7 @@ desktop surface 是 dsh-desktop 的核心插件（`src/index.js`），是 DSH �
 - `.github/workflows/release.yml` — 推 `v*` tag 时构建三平台产物并创建 GitHub Release
 - `dist/electron/runtime/` — 打包产物（git 忽略），发布态 Electron 运行时
 - `cordis.patch.yml` — 插件编排（desktop surface + 禁用 webserver + 关闭假 URL）
-- `test/index.test.js`、`test/electron-web-server.test.js`、`test/ipc-channel.test.js`、`test/remote-stream.test.js`、`test/startup.test.js` — 单元测试
+- `test/index.test.js`、`test/detach.test.js`、`test/electron-web-server.test.js`、`test/ipc-channel.test.js`、`test/remote-stream.test.js`、`test/startup.test.js` — 单元测试
 <!-- CONTENT_END: related_files -->
 
 ---

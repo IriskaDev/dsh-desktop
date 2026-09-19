@@ -13,6 +13,7 @@
 ## 特性
 
 - **一条命令开箱即用**：`dsh --profile dsh-desktop` 启动后自动打开桌面窗口，无需手动访问浏览器。
+- **终端即刻释放**：在交互式终端里启动时，插件会把桌面实例交给一个 detached 子进程承载，命令**立即返回** shell 提示符，窗口与 agent 继续在后台运行；日志落在 `~/.dsh/desktop.log`。
 - **无本地 HTTP 服务**：不启动 `node:http`、不监听任何 TCP 端口；静态资源、API 与事件流全部走 Electron IPC/自定义协议。
 - **完全复用 DSH Web**：前端 UI、会话/工作区持久化、agent、工具全部由 DSH 原有 Cordis 服务提供。
 - **DSH 风格标题栏**：隐藏系统原生标题栏，由 preload 注入一条按 DSH 主题 token 着色的可见标题栏，原生最小化/最大化/关闭按钮以同色 overlay 保留。
@@ -24,7 +25,7 @@
 
 ```text
 dsh --profile dsh-desktop
-        │
+        │  交互式终端？→ 交给 detached 子进程承载后本进程立即退出
         ▼
 DSH boot（web-app bundle + desktop patch）
         │  patch 禁用 dsh-host-webserver；
@@ -114,6 +115,19 @@ dsh --profile dsh-desktop
 
 启动后 Electron 窗口会自动打开并加载 DSH Web 界面，直接在窗口中对话即可。
 
+### 终端行为
+
+在交互式终端里执行上面这条命令时，它会**立刻返回**：插件检测到自己跑在前台终端上，就把桌面实例交给一个 detached 子进程，自己随即退出，所以不会长期占用你的终端窗口/标签页；窗口关闭时后台实例照旧一起退出（与之前一致）。
+
+| 场景 | 行为 |
+|------|------|
+| 交互式终端（stdin/stdout/stderr 都是 TTY） | 自动后台化，命令立即返回 |
+| 管道 / 重定向 / CI（任一不是 TTY） | 前台运行，保持原有语义 |
+| `DSH_DESKTOP_NO_DETACH=1` | 强制前台运行，便于调试插件加载期问题 |
+| `DSH_DESKTOP_DETACHED=1` | 内部标记（插件自己设置），避免后台化递归 |
+
+后台实例的 stdout/stderr 追加写入 `~/.dsh/desktop.log`（可用 `DSH_DESKTOP_LOG` 覆盖）：窗口起不来时先看这个文件，启动期故障、Electron 崩溃日志都在里面。
+
 如需查看透传给 Web 应用的参数：
 
 ```bash
@@ -181,6 +195,9 @@ dsh-desktop/
 | `DSH_ELECTRON_IPC_FD` | fd-3 管道的文件描述符编号（默认 `3`），供 Electron 主进程与 DSH 父进程通信 |
 | `DSH_ELECTRON_PARENT_PID` | 父进程 PID。Electron 每 2 秒探测一次，父进程退出后自动退出。插件自动设为 DSH 进程 PID；独立运行时默认 `process.ppid` |
 | `DSH_ELECTRON_URL` | 独立运行 `apps/electron`（非 offline 模式）时加载的 URL，默认 `http://127.0.0.1:3080` |
+| `DSH_DESKTOP_NO_DETACH` | 设为任意非空值即关闭「前台自动后台化」，命令保持占用终端（调试用） |
+| `DSH_DESKTOP_DETACHED` | 由插件写入后台子进程，标记它已经是 detached 实例，防止无限递归后台化 |
+| `DSH_DESKTOP_LOG` | 后台实例 stdout/stderr 的日志路径，默认 `$DSH_HOME/desktop.log`（即 `~/.dsh/desktop.log`） |
 
 ## License
 

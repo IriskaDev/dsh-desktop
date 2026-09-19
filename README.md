@@ -13,6 +13,7 @@ Unlike `dsh web`, which starts a local HTTP server and requires you to open a br
 ## Features
 
 - **One command, ready to use**: `dsh --profile dsh-desktop` opens the desktop window automatically — no need to visit the browser.
+- **Terminal released immediately**: launched from an interactive terminal, the plugin hands the desktop instance to a detached child process, so the command **returns to the shell prompt at once** while the window and agent keep running in the background; logs land in `~/.dsh/desktop.log`.
 - **No local HTTP server**: no `node:http` and no TCP listening port; static assets, APIs, and event streams all travel over Electron IPC / custom protocol.
 - **Full DSH Web reuse**: the frontend UI, session/workspace persistence, agent, and tools are all provided by DSH's existing Cordis services.
 - **DSH-styled title bar**: the OS title bar is hidden, but a preload script injects a visible title bar styled with DSH's theme tokens, while the native minimize/maximize/close controls stay as a color-matched overlay.
@@ -24,7 +25,7 @@ Unlike `dsh web`, which starts a local HTTP server and requires you to open a br
 
 ```text
 dsh --profile dsh-desktop
-        │
+        │  interactive terminal? → hand off to a detached child, then exit
         ▼
 DSH boot (web-app bundle + desktop patch)
         │  patch disables dsh-host-webserver;
@@ -118,6 +119,19 @@ dsh --profile dsh-desktop
 
 After startup, the Electron window opens automatically and loads the DSH Web UI — just chat in the window.
 
+### Terminal behavior
+
+Run from an interactive terminal, the command **returns immediately**: the plugin notices it is on a foreground terminal and hands the desktop instance to a detached child process before exiting itself, so it never occupies a terminal window or tab; closing the window still shuts the background instance down (unchanged behavior).
+
+| Situation | Behavior |
+|-----------|----------|
+| Interactive terminal (stdin/stdout/stderr are all TTYs) | Detaches automatically; the command returns at once |
+| Pipe / redirect / CI (any stream is not a TTY) | Runs in the foreground, exactly as before |
+| `DSH_DESKTOP_NO_DETACH=1` | Forces the foreground behavior, useful when debugging plugin startup |
+| `DSH_DESKTOP_DETACHED=1` | Internal marker (set by the plugin) preventing recursive detaching |
+
+The detached instance appends stdout/stderr to `~/.dsh/desktop.log` (override with `DSH_DESKTOP_LOG`): when no window appears, that file is the first place to look — startup failures and Electron crashes both land there.
+
 To inspect arguments forwarded to the web app:
 
 ```bash
@@ -185,6 +199,9 @@ The plugin sets the following variables automatically when launching Electron; t
 | `DSH_ELECTRON_IPC_FD` | File descriptor number for the DSH ↔ Electron pipe (default `3`) |
 | `DSH_ELECTRON_PARENT_PID` | Parent process PID. Electron probes it every 2 seconds and quits when the parent exits. The plugin sets it to the DSH process PID; standalone default is `process.ppid` |
 | `DSH_ELECTRON_URL` | URL loaded by Electron when running `apps/electron` standalone in non-offline mode; default `http://127.0.0.1:3080` |
+| `DSH_DESKTOP_NO_DETACH` | Any non-empty value disables the automatic foreground detach, keeping the command attached to the terminal (debugging) |
+| `DSH_DESKTOP_DETACHED` | Written by the plugin into the background child to mark it as the detached instance, preventing recursive detaching |
+| `DSH_DESKTOP_LOG` | Log path for the detached instance's stdout/stderr; defaults to `$DSH_HOME/desktop.log` (`~/.dsh/desktop.log`) |
 
 ## License
 
