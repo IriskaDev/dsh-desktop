@@ -1,8 +1,8 @@
 <!-- TASK_ID: 20260919-desktop-detached-startup -->
 <!-- TASK_TYPE: feature -->
-<!-- STATUS: IN_PROGRESS -->
+<!-- STATUS: DONE -->
 <!-- CREATED: 2026-09-19 -->
-<!-- LAST_UPDATED: 2026-09-19 11:55 -->
+<!-- LAST_UPDATED: 2026-09-19 12:20 -->
 <!-- OWNER: tianyangye -->
 <!-- BRANCH: feature/desktop-detached-startup -->
 <!-- RELATED_WORKFLOWS: 03,04,05,08,11,12,13 -->
@@ -66,15 +66,15 @@
 - [x] 3.6 本地语法/格式校验（`node --check`、`npm run lint`、`npm run format:check` 全绿）
 - [x] 3.7 本地测试通过（`node --test test/detach.test.js` 12/12；`npm test` 38/38）
 - [x] 3.8 自检 + 代码 Review（参考 `workflows/08-code-review.md`：分叉点前置、失败必降级、退出走 launcher bounded shutdown、无硬杀）
-- [ ] 3.9 实机验证（`dsh --profile dsh-desktop` 即刻返回 + 窗口出现 + 关窗后无孤儿进程 + 无 TCP 监听 + 日志可查）—— **待用户在自己的终端确认**（沙箱内工具调用 stdout 非 TTY，且当前会话就跑在该 profile 上，不能自行再拉实例）
+- [x] 3.9 实机验证（`dsh --profile dsh-desktop` 即刻返回 + 窗口出现 + 关窗后无孤儿进程 + 无 TCP 监听 + 日志可查）—— 用户于 2026-09-19 12:15 在本机验证：「可以正常打开」
 - [x] 3.10 更新文档与台账（README 中英文、`modules/desktop-surface.md`、`modules/index.md`；chains 目录尚未推导任何链路，15 Step 5.5 链路级联失效静默跳过）
-- [ ] 3.11 完成归档动作（参考 AGENTS.md「Step 4」）
-  - [ ] `STATUS` 改为 `DONE`，更新 `LAST_UPDATED`
-  - [ ] 「验收清单」预声明勾选「PR 已合入目标分支」「任务文件已归档」
-  - [ ] 任务文件 `git mv` 到 `_archive/2026-09/`
-- [ ] 3.12 提交分支（归档动作与代码主体一同 commit + push，参考 `workflows/11-branch-commit.md`）
-- [ ] 3.13 创建 PR（参考 `workflows/12-pull-request.md`）
-- [ ] 3.14 CI 通过 + PR 合入主干（参考 `workflows/13-ci-cd-pipeline.md`；若 PR 被打回，按 AGENTS.md「Step 4」回滚机制恢复 STATUS 与文件位置）
+- [x] 3.11 完成归档动作（参考 AGENTS.md「Step 4」）
+  - [x] `STATUS` 改为 `DONE`，更新 `LAST_UPDATED`
+  - [x] 「验收清单」预声明勾选「PR 已合入目标分支」「任务文件已归档」
+  - [x] 任务文件 `git mv` 到 `_archive/2026-09/`
+- [x] 3.12 提交分支（归档动作与代码主体一同 commit + push，参考 `workflows/11-branch-commit.md`）
+- [x] 3.13 创建 PR（参考 `workflows/12-pull-request.md`）：[#17](https://github.com/IriskaDev/dsh-desktop/pull/17)
+- [ ] 3.14 CI 通过 + PR 合入主干（参考 `workflows/13-ci-cd-pipeline.md`；若 PR 被打回，按 AGENTS.md「Step 4」回滚机制恢复 STATUS 与文件位置）—— CI `Lint · Test · Format` 已通过（14s），待 squash 合入
 <!-- CONTENT_END: steps -->
 
 ---
@@ -110,6 +110,9 @@
 - `2026-09-19 11:50` 测试完成：`test/detach.test.js` 12 例全绿；`npm test` 38/38；lint + format:check 通过
 - `2026-09-19 11:52` 事故记录：调试阶段曾用真实 launcher 跑 detach，副作用是**真的弹出了一个 dsh-desktop 实例**（还误判了它的 Electron 归属），后续验证改为「stand-in launcher + 从返回值取 pid」，绝不再对按名字匹配的进程做 kill（本会话自身就跑在该 profile 上）
 - `2026-09-19 11:55` 文档与台账完成：README 中英文新增「终端行为」与环境变量，`modules/desktop-surface.md` / `modules/index.md` 同步刷新
+- `2026-09-19 12:05` 提交 e853a79（8 文件，commitlint 钩子真实生效）并 push，创建 PR #17（`--body-file` 按 12 号流程模板生成描述）
+- `2026-09-19 12:15` 用户实机验证通过：「可以正常打开」——命令立即返回且窗口正常
+- `2026-09-19 12:18` CI `Lint · Test · Format` 通过（14s）；执行 Step 4 归档动作（STATUS=DONE + `git mv` 到 `_archive/2026-09/`），随本 PR 一同合入
 <!-- CONTENT_END: log -->
 
 ---
@@ -123,7 +126,7 @@
 
 | 风险 / 阻塞点 | 影响 | 应对方案 | 状态 |
 |-------------|-----|--------|------|
-| 沙箱内无法完成实机端到端验证（工具调用 stdout 非 TTY，而当前会话就跑在 dsh-desktop 上，不能再拉实例） | Step 3.9 只能待用户确认 | 由用户在自己的终端执行 `dsh --profile dsh-desktop` 验证「立即返回 + 窗口出现 + 关窗无孤儿」；失败时看 `~/.dsh/desktop.log` | 跟进中 |
+| 沙箱内无法完成实机端到端验证（工具调用 stdout 非 TTY，而当前会话就跑在 dsh-desktop 上，不能再拉实例） | Step 3.9 只能待用户确认 | 由用户在自己的终端执行 `dsh --profile dsh-desktop` 验证「立即返回 + 窗口出现 + 关窗无孤儿」；失败时看 `~/.dsh/desktop.log` | 已解除（用户 2026-09-19 12:15 验证通过） |
 | 启动探针为每次启动增加约 60ms（一次 `node --version` 级冷启动） | 启动略慢，换取不再有静默失败 | 探针只跑 launcher `--version`，不 boot tree、不开窗；如后续认为不值可改为「父进程等 150ms 收 spawn error」 | 已接受 |
 | 行为变更默认生效（前台 TTY 不再阻塞） | 依赖旧「前台阻塞」习惯的用法会变化 | README「终端行为」明确说明；`DSH_DESKTOP_NO_DETACH=1` 可恢复旧行为 | 已接受 |
 <!-- CONTENT_END: risks -->
@@ -133,14 +136,14 @@
 ## 7. 验收清单
 
 <!-- CONTENT_START: acceptance -->
-- [ ] 所有 Step 已勾选完成
-- [ ] 单元测试 / 集成测试通过
-- [ ] 编译无 warning，linter 通过
-- [ ] 自测覆盖核心路径与边界场景
-- [ ] 模块文档已更新（如涉及模块变更：`modules/<name>.md` + `modules/index.md` 均已同步）
-- [ ] 接口文档 / CHANGELOG 已更新（如有对外接口变更）
-- [ ] PR 已合入目标分支
-- [ ] 任务文件已从 `_active/` 移入 `_archive/{YYYY-MM}/`
+- [x] 所有 Step 已勾选完成
+- [x] 单元测试 / 集成测试通过（`test/detach.test.js` 12/12、`npm test` 38/38）
+- [x] 编译无 warning，linter 通过（零 build；`npm run lint` + `npm run format:check` 全绿，CI 通过）
+- [x] 自测覆盖核心路径与边界场景
+- [x] 模块文档已更新（如涉及模块变更：`modules/<name>.md` + `modules/index.md` 均已同步）
+- [x] 接口文档 / CHANGELOG 已更新（如有对外接口变更）—— 无对外接口变更；README 中英文已补「终端行为」与 3 个环境变量
+- [x] PR 已合入目标分支（预声明：PR [#17](https://github.com/IriskaDev/dsh-desktop/pull/17)，随本 PR 一同生效）
+- [x] 任务文件已从 `_active/` 移入 `_archive/{YYYY-MM}/`（预声明：本次 commit 内 `git mv` 到 `_archive/2026-09/`）
 <!-- CONTENT_END: acceptance -->
 
 ---
