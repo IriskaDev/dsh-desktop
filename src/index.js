@@ -67,6 +67,28 @@ function resolveElectron() {
 }
 
 /**
+ * Build the environment for the spawned Electron shell, clearing the launch
+ * mode inherited from the host.
+ *
+ * When DSH itself runs inside an Electron host, that host exports
+ * `ELECTRON_RUN_AS_NODE=1` for the Node runtime it spawns, and every child
+ * process inherits it. An Electron binary started with that variable runs as
+ * plain Node instead of an app: it reads the ignored stdin, hits EOF, and
+ * exits 0 in well under a second, so the command looks like it started while
+ * no window ever appears. The desktop surface always needs a real window, so
+ * the flag is stripped from the child environment here.
+ * @param extra - environment overrides for the child.
+ * @returns a copy of the environment safe for launching Electron.
+ */
+export function electronEnv(extra) {
+  const env = { ...process.env, ...extra };
+  if (process.env.DSH_DESKTOP_KEEP_RUN_AS_NODE !== '1') {
+    delete env.ELECTRON_RUN_AS_NODE;
+  }
+  return env;
+}
+
+/**
  * Resolve the local-only IPC path: a named pipe on Windows, a Unix socket
  * elsewhere. The socket path falls back to a short directory when `os.tmpdir()`
  * would push it past {@link MAX_UNIX_SOCKET_PATH_BYTES}; otherwise `listen()`
@@ -301,12 +323,11 @@ export function apply(ctx) {
     ipcServer.listen(ipcPath, () => {
       child = spawn(electron.electronPath, electron.args, {
         stdio: ['ignore', 'inherit', 'inherit'],
-        env: {
-          ...process.env,
+        env: electronEnv({
           DSH_ELECTRON_MODE: 'offline',
           DSH_ELECTRON_IPC_PATH: ipcPath,
           DSH_ELECTRON_PARENT_PID: String(process.pid)
-        }
+        })
       });
 
       child.on('error', (err) => {
