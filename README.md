@@ -202,6 +202,7 @@ The plugin sets the following variables automatically when launching Electron; t
 | `DSH_DESKTOP_NO_DETACH` | Any non-empty value disables the automatic foreground detach, keeping the command attached to the terminal (debugging) |
 | `DSH_DESKTOP_DETACHED` | Written by the plugin into the background child to mark it as the detached instance, preventing recursive detaching |
 | `DSH_DESKTOP_LOG` | Log path for the detached instance's stdout/stderr; defaults to `$DSH_HOME/desktop.log` (`~/.dsh/desktop.log`) |
+| `DSH_DESKTOP_KEEP_RUN_AS_NODE` | Set to `1` to keep an inherited `ELECTRON_RUN_AS_NODE` when launching Electron (debugging only). The plugin normally clears it: an Electron binary started with that variable runs as plain Node and exits without showing a window, which is what happens when DSH itself is running under an Electron host |
 
 ## License
 

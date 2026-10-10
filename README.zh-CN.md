@@ -198,6 +198,7 @@ dsh-desktop/
 | `DSH_DESKTOP_NO_DETACH` | 设为任意非空值即关闭「前台自动后台化」，命令保持占用终端（调试用） |
 | `DSH_DESKTOP_DETACHED` | 由插件写入后台子进程，标记它已经是 detached 实例，防止无限递归后台化 |
 | `DSH_DESKTOP_LOG` | 后台实例 stdout/stderr 的日志路径，默认 `$DSH_HOME/desktop.log`（即 `~/.dsh/desktop.log`） |
+| `DSH_DESKTOP_KEEP_RUN_AS_NODE` | 设为 `1` 时保留继承来的 `ELECTRON_RUN_AS_NODE`（仅调试用）。插件默认会清除它：带该变量的 Electron 二进制会以纯 Node 模式运行并直接退出、不显示窗口，DSH 自身运行在 Electron 宿主中时即会命中这一情况 |
 
 ## License
 

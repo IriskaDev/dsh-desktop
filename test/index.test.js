@@ -4,6 +4,7 @@ import net from 'node:net';
 import {
   name,
   apply,
+  electronEnv,
   reportStartupFailure,
   resolveDesktopUrl,
   resolveIpcPath
@@ -94,4 +95,55 @@ test('reportStartupFailure reports on the host logger and stderr', () => {
     chunks.join(''),
     'desktop: ipc server error: EINVAL\ndesktop: no logger available\n'
   );
+});
+
+/**
+ * Apply environment overrides for the duration of `body`, restoring every
+ * touched variable afterwards. `undefined` removes a variable.
+ * @param overrides - the variables to set or remove.
+ * @param body - the assertions to run.
+ */
+function withEnv(overrides, body) {
+  const previous = new Map();
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    body();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test('electronEnv clears an inherited ELECTRON_RUN_AS_NODE', () => {
+  withEnv(
+    { ELECTRON_RUN_AS_NODE: '1', DSH_DESKTOP_KEEP_RUN_AS_NODE: undefined },
+    () => {
+      const env = electronEnv({ DSH_ELECTRON_MODE: 'offline' });
+      assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
+      assert.equal(env.DSH_ELECTRON_MODE, 'offline');
+      // The parent environment is left untouched.
+      assert.equal(process.env.ELECTRON_RUN_AS_NODE, '1');
+    }
+  );
+});
+
+test('electronEnv keeps the launch mode when the opt-out is set', () => {
+  withEnv(
+    { ELECTRON_RUN_AS_NODE: '1', DSH_DESKTOP_KEEP_RUN_AS_NODE: '1' },
+    () => {
+      assert.equal(electronEnv({}).ELECTRON_RUN_AS_NODE, '1');
+    }
+  );
+});
+
+test('electronEnv inherits the rest of the environment', () => {
+  withEnv({ DSH_DESKTOP_TEST_MARKER: 'kept' }, () => {
+    assert.equal(electronEnv({}).DSH_DESKTOP_TEST_MARKER, 'kept');
+  });
 });
